@@ -1,9 +1,9 @@
 import {
   DarkTheme,
   DefaultTheme,
-  ThemeProvider,
-} from "@react-navigation/native";
-import { Stack } from "expo-router";
+  Stack,
+  ThemeProvider
+} from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { createContext, useContext, useState } from "react";
 import "react-native-reanimated";
@@ -80,6 +80,10 @@ export default function RootLayout() {
             />
             <Stack.Screen
               name="teacher-announcements"
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="teacher-assign-ta"
               options={{ headerShown: false }}
             />
           </Stack.Protected>
