@@ -43,6 +43,7 @@ app-example
 /android
 
 # Python 後端忽略清單
+.env
 Python_BackEnd/venv/
 Python_BackEnd/__pycache__/
 Python_BackEnd/.env
