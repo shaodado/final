@@ -37,7 +37,7 @@ const bubbles: Bubble[] = [
 
 export default function HomeScreen() {
   const router = useRouter();
-  const { signOut } = useAuth();
+  const { signOut, userName } = useAuth();
 
   const handleLogout = (): void => {
     signOut();
@@ -58,7 +58,9 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <View>
             <Text style={styles.eyebrow}>A QUIET PLACE FOR YOU</Text>
-            <Text style={styles.headerTitle}>我的空間</Text>
+            <Text style={styles.headerTitle}>
+              {userName ? `${userName}的空間` : "我的空間"}
+            </Text>
           </View>
 
           <Pressable
@@ -78,9 +80,7 @@ export default function HomeScreen() {
         <View style={styles.intro}>
           <Text style={styles.introTitle}>今天想去哪裡？</Text>
 
-          <Text style={styles.introCopy}>
-            選一顆泡泡，進入你的專屬空間
-          </Text>
+          <Text style={styles.introCopy}>選一顆泡泡，進入你的專屬空間</Text>
         </View>
 
         {/* 功能泡泡 */}
@@ -108,10 +108,7 @@ type BubbleButtonProps = {
   onPress: () => void;
 };
 
-function BubbleButton({
-  bubble,
-  onPress,
-}: BubbleButtonProps) {
+function BubbleButton({ bubble, onPress }: BubbleButtonProps) {
   return (
     <Pressable
       accessibilityRole="button"
@@ -148,17 +145,13 @@ function BubbleButton({
           {bubble.label}
         </Text>
 
-        <Text style={styles.bubbleSubtitle}>
-          {bubble.subtitle}
-        </Text>
+        <Text style={styles.bubbleSubtitle}>{bubble.subtitle}</Text>
       </LinearGradient>
     </Pressable>
   );
 }
 
-function getBubblePositionStyle(
-  position: BubblePosition,
-) {
+function getBubblePositionStyle(position: BubblePosition) {
   switch (position) {
     case "right":
       return styles.bubbleRight;
@@ -300,7 +293,7 @@ const styles = StyleSheet.create({
       width: 6,
       height: 9,
     },
-    shadowOpacity: 0.30,
+    shadowOpacity: 0.3,
     shadowRadius: 16,
 
     elevation: 10,
