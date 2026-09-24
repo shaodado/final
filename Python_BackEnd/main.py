@@ -87,3 +87,29 @@ def login(req: LoginRequest):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/student/feed")
+def get_student_feed(user_id: int):
+    try:
+        # 1. 嘗試從 NOTIFY 或 ANNOUNCEMENT 集合查詢專屬/修課公告
+        collection_names = db.list_collection_names()
+        target_col = None
+        if "NOTIFY" in collection_names:
+            target_col = db["NOTIFY"]
+        elif "ANNOUNCEMENT" in collection_names:
+            target_col = db["ANNOUNCEMENT"]
+
+        feeds = []
+        if target_col is not None:
+            # 撈取該學生修課相關或全體公告
+            docs = list(target_col.find().sort("_id", -1).limit(5))
+            for doc in docs:
+                feeds.append({
+                    "icon": "megaphone-outline",
+                    "text": doc.get("title") or doc.get("content") or "課堂公告",
+                    "time": str(doc.get("created_at", "最新"))
+                })
+
+        return {"success": True, "user_id": user_id, "data": feeds}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
