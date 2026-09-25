@@ -6,6 +6,7 @@ import {
   Alert,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -19,11 +20,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "./_layout";
 
-type Course = {
-  name: string;
-  teacher: string;
-  time: string;
-  rating: number;
+type CourseItem = {
+  course_id: number;
+  course_name: string;
+  teacher?: string;
+  department?: string;
+  grade?: string;
+  category?: string;
 };
 
 type Evaluation = {
@@ -40,46 +43,11 @@ type Evaluation = {
 
 type Panel = "rate" | "quiz" | "reviews" | "details" | "reminder" | null;
 
-type ActionProps = {
-  title: string;
-  detail: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  color: string;
-  active?: boolean;
-  onPress: () => void;
-};
+const DEPARTMENTS = ["全部", "資訊工程學系", "數位媒體設計系", "全校通識"];
+const GRADES = ["全部", "大一", "大二", "大三", "大四"];
+const CATEGORIES = ["全部", "必修", "選修", "通識"];
 
-type PanelContentProps = {
-  panel: Exclude<Panel, null>;
-  close: () => void;
-  // 👈 1. 拆分為獨立的甜度、涼度、收穫度狀態
-  sweetness: number;
-  setSweetness: (val: number) => void;
-  easiness: number;
-  setEasiness: (val: number) => void;
-  gains: number;
-  setGains: (val: number) => void;
-  comment: string;
-  setComment: (text: string) => void;
-  quizStep: number;
-  answers: string[];
-  answer: (value: string) => void;
-  restartQuiz: () => void;
-  reminderOn: boolean;
-  setReminderOn: (value: boolean) => void;
-  evaluations: Evaluation[];
-  loadingReviews: boolean;
-  onSubmitRating: () => void;
-  onReportReview: () => void;
-  onFocusComment: () => void;
-};
-
-type CourseRowsProps = {
-  review?: boolean;
-  details?: boolean;
-};
-
-const courses: Course[] = [
+const defaultCourses = [
   {
     name: "使用者經驗設計",
     teacher: "林怡君",
@@ -116,61 +84,125 @@ export default function MoodScreen() {
 
   const [panel, setPanel] = useState<Panel>(null);
 
-  // 👈 2. 獨立管理三項評分
+  // 評分狀態
   const [sweetness, setSweetness] = useState<number>(0);
   const [easiness, setEasiness] = useState<number>(0);
   const [gains, setGains] = useState<number>(0);
-
   const [comment, setComment] = useState<string>("");
+
+  // 已修課程下拉選單狀態
+  const [myCourses, setMyCourses] = useState<CourseItem[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState<CourseItem | null>(null);
+  const [courseModalVisible, setCourseModalVisible] = useState<boolean>(false);
+
+  // 結構化篩選狀態
+  const [filterDept, setFilterDept] = useState<string>("全部");
+  const [filterGrade, setFilterGrade] = useState<string>("全部");
+  const [filterCategory, setFilterCategory] = useState<string>("全部");
+  const [searchedCourses, setSearchedCourses] = useState<CourseItem[]>([]);
+  const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
+  const [loadingReviews, setLoadingReviews] = useState<boolean>(false);
+
+  // 心理測驗與提醒狀態
   const [quizStep, setQuizStep] = useState<number>(0);
   const [quizAnswers, setQuizAnswers] = useState<string[]>([]);
   const [reminderOn, setReminderOn] = useState<boolean>(false);
 
-  const [evaluations, setEvaluations] = useState<Evaluation[]>([]);
-  const [loadingReviews, setLoadingReviews] = useState<boolean>(false);
-
   // @ts-ignore
   const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
+  // 鍵盤監聽（僅監聽事件，不觸發同步 setState）
   useEffect(() => {
     const showEvent =
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent =
       Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
 
-    const showSubscription = Keyboard.addListener(showEvent, (e) => {
+    const showSub = Keyboard.addListener(showEvent, (e) => {
       setKeyboardHeight(e.endCoordinates.height);
-      setTimeout(() => {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      setTimeout(
+        () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+        100
+      );
     });
-
-    const hideSubscription = Keyboard.addListener(hideEvent, () => {
-      setKeyboardHeight(0);
-    });
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
 
     return () => {
-      showSubscription.remove();
-      hideSubscription.remove();
+      showSub.remove();
+      hideSub.remove();
     };
   }, []);
 
-  const handleScrollToBottom = () => {
-    setTimeout(() => {
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 150);
+  // 取得學生已修課程清單
+  const fetchMyCourses = async () => {
+    try {
+      const res = await fetch(
+        `${baseUrl}/api/student/my-courses?user_id=${currentUserId}`
+      );
+      const json = await res.json();
+      if (json.success && json.data.length > 0) {
+        setMyCourses(json.data);
+        setSelectedCourse(json.data[0]);
+      } else {
+        setMyCourses([
+          {
+            course_id: 101,
+            course_name: "資料庫管理",
+            teacher: "林老師",
+            category: "必修",
+            department: "資訊工程學系",
+          },
+        ]);
+        setSelectedCourse({
+          course_id: 101,
+          course_name: "資料庫管理",
+          teacher: "林老師",
+          category: "必修",
+          department: "資訊工程學系",
+        });
+      }
+    } catch {
+      setMyCourses([
+        {
+          course_id: 101,
+          course_name: "資料庫管理",
+          teacher: "林老師",
+          category: "必修",
+          department: "資訊工程學系",
+        },
+      ]);
+      setSelectedCourse({
+        course_id: 101,
+        course_name: "資料庫管理",
+        teacher: "林老師",
+        category: "必修",
+        department: "資訊工程學系",
+      });
+    }
   };
 
-  const fetchEvaluations = async () => {
+  // 依條件搜尋全校課程與評價（接受動態篩選引數）
+  const fetchFilteredCoursesAndReviews = async (
+    dept = filterDept,
+    grade = filterGrade,
+    category = filterCategory
+  ) => {
     try {
       setLoadingReviews(true);
-      const res = await fetch(`${baseUrl}/api/evaluations`);
+      const url = `${baseUrl}/api/courses/search?department=${encodeURIComponent(dept)}&grade=${encodeURIComponent(grade)}&category=${encodeURIComponent(category)}`;
+      const res = await fetch(url);
       const json = await res.json();
       if (json.success) {
-        setEvaluations(json.data);
+        setSearchedCourses(json.data);
+      }
+
+      const evalRes = await fetch(`${baseUrl}/api/evaluations`);
+      const evalJson = await evalRes.json();
+      if (evalJson.success) {
+        setEvaluations(evalJson.data);
       }
     } catch (err) {
-      console.error("無法取得雲端課評:", err);
+      console.error("篩選評價失敗:", err);
     } finally {
       setLoadingReviews(false);
     }
@@ -184,7 +216,11 @@ export default function MoodScreen() {
       setEasiness(0);
       setGains(0);
       setComment("");
-      handleScrollToBottom();
+      fetchMyCourses();
+      setTimeout(
+        () => scrollViewRef.current?.scrollToEnd({ animated: true }),
+        150
+      );
     }
 
     if (nextPanel === "quiz") {
@@ -193,40 +229,25 @@ export default function MoodScreen() {
     }
 
     if (nextPanel === "reviews") {
-      fetchEvaluations();
+      fetchFilteredCoursesAndReviews(filterDept, filterGrade, filterCategory);
     }
   };
 
-  const handleAnswer = (value: string): void => {
-    setQuizAnswers((currentAnswers: string[]) => [...currentAnswers, value]);
-
-    if (quizStep < quizQuestions.length - 1) {
-      setQuizStep((currentStep: number) => currentStep + 1);
-    }
-  };
-
-  const handleRestartQuiz = (): void => {
-    setQuizStep(0);
-    setQuizAnswers([]);
-  };
-
-  // 👈 3. 送出時分別驗證並送出三個維度評分
+  // 送出評價
   const handleSubmitRating = async (): Promise<void> => {
     Keyboard.dismiss();
 
+    if (!selectedCourse) {
+      Alert.alert("請先選擇課程", "請點擊上方下拉選單選擇欲評價的課程。");
+      return;
+    }
     if (sweetness === 0 || easiness === 0 || gains === 0) {
       Alert.alert("請完成評分", "請為甜度、涼度與收穫度皆選擇 1 到 5 顆星。");
       return;
     }
-
-    const trimmedComment = comment.trim();
-    if (!trimmedComment) {
-      Alert.alert("請填寫心得", "請輸入修課心得後再送出。");
-      return;
-    }
-
-    if (trimmedComment.length > 30) {
-      Alert.alert("字數超限", "心得字數請限制在 30 字以內。");
+    const trimmed = comment.trim();
+    if (!trimmed) {
+      Alert.alert("請填寫心得", "請輸入 30 字以內的修課回饋。");
       return;
     }
 
@@ -235,44 +256,41 @@ export default function MoodScreen() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          course_id: 1,
+          course_id: selectedCourse.course_id,
           user_id: currentUserId,
-          sweetness: sweetness, // 👈 真實甜度 (1~5)
-          easiness: easiness, // 👈 真實涼度 (1~5)
-          gains: gains, // 👈 真實收穫度 (1~5)
-          comment: trimmedComment,
+          sweetness,
+          easiness,
+          gains,
+          comment: trimmed,
           evaluation_status: "已審核",
         }),
       });
-
       const json = await res.json();
-
       if (json.success) {
         Alert.alert(
-          "已送出評價",
-          `謝謝 ${userName || "同學"}，你的詳細評分已成功記錄！`
+          "送出成功",
+          `你對《${selectedCourse.course_name}》的評價已成功儲存！`
         );
         setSweetness(0);
         setEasiness(0);
         setGains(0);
         setComment("");
         setPanel("reviews");
-        fetchEvaluations();
+        fetchFilteredCoursesAndReviews(filterDept, filterGrade, filterCategory);
       } else {
         Alert.alert("送出失敗", json.message || "評價無法記錄。");
       }
-    } catch (err) {
-      console.error("送出課評發生錯誤:", err);
-      Alert.alert(
-        "連線錯誤",
-        "無法連線至後端伺服器，請確認電腦後端是否運作中。"
-      );
+    } catch {
+      Alert.alert("連線失敗", "無法連接伺服器，請確認後端運行中。");
     }
   };
 
-  const handleReportReview = (): void => {
-    Alert.alert("檢舉已送出", "我們會盡快審核這則課程評價。");
+  const handleAnswer = (value: string): void => {
+    setQuizAnswers((curr) => [...curr, value]);
+    if (quizStep < quizQuestions.length - 1) setQuizStep((s) => s + 1);
   };
+
+  const isQuizFinished = quizAnswers.length === quizQuestions.length;
 
   return (
     <View style={styles.page}>
@@ -280,12 +298,7 @@ export default function MoodScreen() {
       <View style={[styles.glow, styles.glowBottom]} />
 
       <SafeAreaView style={styles.safeArea}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="返回大廳"
-          onPress={() => router.back()}
-          style={styles.backButton}
-        >
+        <Pressable style={styles.backButton} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={20} color="#E9FFF7" />
           <Text style={styles.backText}>大廳</Text>
         </Pressable>
@@ -293,7 +306,6 @@ export default function MoodScreen() {
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === "ios" ? "padding" : undefined}
-          keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
         >
           <ScrollView
             ref={scrollViewRef}
@@ -308,19 +320,16 @@ export default function MoodScreen() {
                     : 40,
               },
             ]}
-            showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
+            showsVerticalScrollIndicator={false}
           >
-            <TouchableWithoutFeedback
-              onPress={Keyboard.dismiss}
-              accessible={false}
-            >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
               <View>
                 <Text style={styles.kicker}>COURSE SELECTION HUB</Text>
                 <Text style={styles.title}>選課模組</Text>
                 <Text style={styles.description}>
-                  探索適合自己的課程，也讓每一份修課經驗成為下一位同學的參考。
+                  探索適合自己的課程，透過精準課評數據打造最客觀的選課指南。
                 </Text>
 
                 <Text style={styles.sectionTitle}>選課工具</Text>
@@ -328,7 +337,7 @@ export default function MoodScreen() {
                 <View style={styles.actionList}>
                   <Action
                     title="給予課程評價"
-                    detail="分享修課後的真實感受"
+                    detail="僅限為已修課程分享真實感受"
                     icon="star-outline"
                     color="#F2C14E"
                     onPress={() => openPanel("rate")}
@@ -342,7 +351,7 @@ export default function MoodScreen() {
                   />
                   <Action
                     title="查看結構化課程評價"
-                    detail="快速比較課程特色與回饋"
+                    detail="依系所、年級、必選修精準搜尋"
                     icon="bar-chart-outline"
                     color="#9AD8ED"
                     onPress={() => openPanel("reviews")}
@@ -364,87 +373,436 @@ export default function MoodScreen() {
                   />
                 </View>
 
-                {panel !== null && (
-                  <PanelContent
-                    panel={panel}
-                    close={() => setPanel(null)}
-                    sweetness={sweetness}
-                    setSweetness={setSweetness}
-                    easiness={easiness}
-                    setEasiness={setEasiness}
-                    gains={gains}
-                    setGains={setGains}
-                    comment={comment}
-                    setComment={setComment}
-                    quizStep={quizStep}
-                    answers={quizAnswers}
-                    answer={handleAnswer}
-                    restartQuiz={handleRestartQuiz}
-                    reminderOn={reminderOn}
-                    setReminderOn={setReminderOn}
-                    evaluations={evaluations}
-                    loadingReviews={loadingReviews}
-                    onSubmitRating={handleSubmitRating}
-                    onReportReview={handleReportReview}
-                    onFocusComment={handleScrollToBottom}
-                  />
+                {/* 1. 給予課程評價 */}
+                {panel === "rate" && (
+                  <View style={styles.panel}>
+                    <View style={styles.panelHeader}>
+                      <Text style={styles.panelTitle}>給予課程評價</Text>
+                      <Pressable onPress={() => setPanel(null)}>
+                        <Ionicons name="close" size={22} color="#D7F0E8" />
+                      </Pressable>
+                    </View>
+
+                    <Text style={styles.inputLabel}>選擇要評價的已修課程</Text>
+                    <Pressable
+                      style={styles.dropdownBtn}
+                      onPress={() => setCourseModalVisible(true)}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.dropdownCourseTitle}>
+                          {selectedCourse
+                            ? selectedCourse.course_name
+                            : "請選擇課程"}
+                        </Text>
+                        <Text style={styles.dropdownCourseSub}>
+                          {selectedCourse
+                            ? `${selectedCourse.teacher || "授課教師"} · ${selectedCourse.category || "必修"} · ${selectedCourse.department || "系所"}`
+                            : "點擊載入已修課程"}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-down" size={18} color="#9AD8ED" />
+                    </Pressable>
+
+                    <View style={styles.ratingSection}>
+                      <StarRatingRow
+                        label="甜度"
+                        value={sweetness}
+                        onChange={setSweetness}
+                      />
+                      <StarRatingRow
+                        label="涼度"
+                        value={easiness}
+                        onChange={setEasiness}
+                      />
+                      <StarRatingRow
+                        label="收穫"
+                        value={gains}
+                        onChange={setGains}
+                      />
+                    </View>
+
+                    <Text style={styles.inputLabel}>
+                      心得與回饋（限 30 字）
+                    </Text>
+                    <TextInput
+                      style={styles.commentInput}
+                      value={comment}
+                      onChangeText={setComment}
+                      placeholder="例如：給分扎實、專案實作很有成就感！"
+                      placeholderTextColor="#7BA79C"
+                      maxLength={30}
+                      multiline
+                    />
+                    <Text style={styles.charCount}>
+                      {comment.length} / 30 字
+                    </Text>
+
+                    <Pressable
+                      style={styles.primaryButton}
+                      onPress={handleSubmitRating}
+                    >
+                      <Text style={styles.primaryText}>送出評價</Text>
+                    </Pressable>
+                  </View>
+                )}
+
+                {/* 2. 結構化課程評價（按鈕手動觸發查詢，無 ESLint 警告） */}
+                {panel === "reviews" && (
+                  <View style={styles.panel}>
+                    <View style={styles.panelHeader}>
+                      <Text style={styles.panelTitle}>結構化課程評價檢索</Text>
+                      <Pressable onPress={() => setPanel(null)}>
+                        <Ionicons name="close" size={22} color="#D7F0E8" />
+                      </Pressable>
+                    </View>
+
+                    <Text style={styles.filterTitle}>系所別</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.pillRow}
+                    >
+                      {DEPARTMENTS.map((dept) => (
+                        <Pressable
+                          key={dept}
+                          style={[
+                            styles.pill,
+                            filterDept === dept && styles.pillActive,
+                          ]}
+                          onPress={() => {
+                            setFilterDept(dept);
+                            fetchFilteredCoursesAndReviews(
+                              dept,
+                              filterGrade,
+                              filterCategory
+                            );
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.pillText,
+                              filterDept === dept && styles.pillTextActive,
+                            ]}
+                          >
+                            {dept}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+
+                    <Text style={styles.filterTitle}>年級</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.pillRow}
+                    >
+                      {GRADES.map((g) => (
+                        <Pressable
+                          key={g}
+                          style={[
+                            styles.pill,
+                            filterGrade === g && styles.pillActive,
+                          ]}
+                          onPress={() => {
+                            setFilterGrade(g);
+                            fetchFilteredCoursesAndReviews(
+                              filterDept,
+                              g,
+                              filterCategory
+                            );
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.pillText,
+                              filterGrade === g && styles.pillTextActive,
+                            ]}
+                          >
+                            {g}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+
+                    <Text style={styles.filterTitle}>修別</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.pillRow}
+                    >
+                      {CATEGORIES.map((cat) => (
+                        <Pressable
+                          key={cat}
+                          style={[
+                            styles.pill,
+                            filterCategory === cat && styles.pillActive,
+                          ]}
+                          onPress={() => {
+                            setFilterCategory(cat);
+                            fetchFilteredCoursesAndReviews(
+                              filterDept,
+                              filterGrade,
+                              cat
+                            );
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.pillText,
+                              filterCategory === cat && styles.pillTextActive,
+                            ]}
+                          >
+                            {cat}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+
+                    <View style={styles.divider} />
+
+                    {loadingReviews ? (
+                      <Text
+                        style={[
+                          styles.panelCopy,
+                          { textAlign: "center", paddingVertical: 18 },
+                        ]}
+                      >
+                        正在篩選符合的課程與評價...
+                      </Text>
+                    ) : searchedCourses.length === 0 ? (
+                      <Text
+                        style={[
+                          styles.panelCopy,
+                          { textAlign: "center", paddingVertical: 18 },
+                        ]}
+                      >
+                        沒有符合此條件的課程。
+                      </Text>
+                    ) : (
+                      searchedCourses.map((course) => {
+                        const courseEvals = evaluations.filter(
+                          (e) =>
+                            Number(e.course_id) === Number(course.course_id)
+                        );
+                        return (
+                          <View
+                            key={course.course_id}
+                            style={styles.courseReviewCard}
+                          >
+                            <View style={styles.cardHeader}>
+                              <View>
+                                <Text style={styles.courseCardName}>
+                                  {course.course_name}
+                                </Text>
+                                <Text style={styles.courseCardMeta}>
+                                  {course.teacher || "授課教師"} ·{" "}
+                                  {course.department || "系所"} ·{" "}
+                                  {course.grade || "年級"} ·{" "}
+                                  {course.category || "修別"}
+                                </Text>
+                              </View>
+                              <Text style={styles.badge}>
+                                {courseEvals.length} 則評價
+                              </Text>
+                            </View>
+
+                            {courseEvals.length === 0 ? (
+                              <Text style={styles.noEvalText}>
+                                目前尚無此課程的詳細評分心得。
+                              </Text>
+                            ) : (
+                              courseEvals.map((ev, idx) => (
+                                <View key={idx} style={styles.singleEval}>
+                                  <View style={styles.evalScoreRow}>
+                                    <Text style={styles.scoreText}>
+                                      甜度 {ev.sweetness}★
+                                    </Text>
+                                    <Text style={styles.scoreText}>
+                                      涼度 {ev.easiness}★
+                                    </Text>
+                                    <Text style={styles.scoreText}>
+                                      收穫 {ev.gains}★
+                                    </Text>
+                                  </View>
+                                  <Text style={styles.evalCommentText}>
+                                    {ev.comment}
+                                  </Text>
+                                </View>
+                              ))
+                            )}
+                          </View>
+                        );
+                      })
+                    )}
+                  </View>
+                )}
+
+                {/* 3. 心理測驗 */}
+                {panel === "quiz" && (
+                  <View style={styles.panel}>
+                    <View style={styles.panelHeader}>
+                      <Text style={styles.panelTitle}>趣味心理測驗</Text>
+                      <Pressable onPress={() => setPanel(null)}>
+                        <Ionicons name="close" size={22} color="#D7F0E8" />
+                      </Pressable>
+                    </View>
+                    {isQuizFinished ? (
+                      <>
+                        <Text style={styles.recommendKicker}>你的測驗報告</Text>
+                        <Text style={styles.recommendTitle}>
+                          適合從「動手探索」開始
+                        </Text>
+                        <Text style={styles.panelCopy}>
+                          依你的回答，推薦你優先查看互動媒體程式設計與使用者經驗設計。
+                        </Text>
+                        <Pressable
+                          style={styles.secondaryButton}
+                          onPress={() => {
+                            setQuizStep(0);
+                            setQuizAnswers([]);
+                          }}
+                        >
+                          <Text style={styles.secondaryText}>重新測驗</Text>
+                        </Pressable>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.progress}>
+                          第 {quizStep + 1} / {quizQuestions.length} 題
+                        </Text>
+                        <Text style={styles.question}>
+                          {quizQuestions[quizStep][0]}
+                        </Text>
+                        <Pressable
+                          style={styles.option}
+                          onPress={() =>
+                            handleAnswer(quizQuestions[quizStep][1])
+                          }
+                        >
+                          <Text style={styles.optionText}>
+                            {quizQuestions[quizStep][1]}
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.option}
+                          onPress={() =>
+                            handleAnswer(quizQuestions[quizStep][2])
+                          }
+                        >
+                          <Text style={styles.optionText}>
+                            {quizQuestions[quizStep][2]}
+                          </Text>
+                        </Pressable>
+                      </>
+                    )}
+                  </View>
+                )}
+
+                {/* 4. 課程詳細資訊 */}
+                {panel === "details" && (
+                  <View style={styles.panel}>
+                    <View style={styles.panelHeader}>
+                      <Text style={styles.panelTitle}>課程詳細資訊</Text>
+                      <Pressable onPress={() => setPanel(null)}>
+                        <Ionicons name="close" size={22} color="#D7F0E8" />
+                      </Pressable>
+                    </View>
+                    <View style={{ gap: 10, marginTop: 14 }}>
+                      {defaultCourses.map((c) => (
+                        <View key={c.name} style={styles.courseSelectItem}>
+                          <Text style={styles.courseSelectName}>{c.name}</Text>
+                          <Text style={styles.courseSelectDetail}>
+                            {c.teacher} · {c.time}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                )}
+
+                {/* 5. 選課提醒 */}
+                {panel === "reminder" && (
+                  <View style={styles.panel}>
+                    <View style={styles.panelHeader}>
+                      <Text style={styles.panelTitle}>選課時程提醒</Text>
+                      <Pressable onPress={() => setPanel(null)}>
+                        <Ionicons name="close" size={22} color="#D7F0E8" />
+                      </Pressable>
+                    </View>
+                    <Text style={styles.panelCopy}>
+                      開啟後，系統會在選課加退選與截止日前主動提醒你。
+                    </Text>
+                    <Pressable
+                      style={[
+                        styles.dropdownBtn,
+                        { marginTop: 14 },
+                        reminderOn && { borderColor: "#F2C14E" },
+                      ]}
+                      onPress={() => setReminderOn(!reminderOn)}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.dropdownCourseTitle}>
+                          選課時程通知
+                        </Text>
+                        <Text style={styles.dropdownCourseSub}>
+                          {reminderOn ? "已開啟推播" : "點擊開啟"}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name={
+                          reminderOn ? "notifications" : "notifications-outline"
+                        }
+                        size={22}
+                        color={reminderOn ? "#F2C14E" : "#C3E0D8"}
+                      />
+                    </Pressable>
+                  </View>
                 )}
               </View>
             </TouchableWithoutFeedback>
           </ScrollView>
         </KeyboardAvoidingView>
+
+        {/* 課程下拉清單彈出視窗 */}
+        <Modal visible={courseModalVisible} transparent animationType="slide">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>選擇已修課程</Text>
+                <Pressable onPress={() => setCourseModalVisible(false)}>
+                  <Ionicons name="close" size={24} color="#F0FFF9" />
+                </Pressable>
+              </View>
+              <ScrollView style={{ maxHeight: 300 }}>
+                {myCourses.map((c) => (
+                  <Pressable
+                    key={c.course_id}
+                    style={[
+                      styles.courseSelectItem,
+                      selectedCourse?.course_id === c.course_id &&
+                        styles.courseSelectItemActive,
+                    ]}
+                    onPress={() => {
+                      setSelectedCourse(c);
+                      setCourseModalVisible(false);
+                    }}
+                  >
+                    <Text style={styles.courseSelectName}>{c.course_name}</Text>
+                    <Text style={styles.courseSelectDetail}>
+                      {c.teacher || "授課教師"} · {c.department || "系所"} (
+                      {c.category || "必修"})
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </View>
   );
 }
 
-function Action({
-  title,
-  detail,
-  icon,
-  color,
-  active = false,
-  onPress,
-}: ActionProps) {
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={title}
-      onPress={onPress}
-      style={styles.actionButton}
-    >
-      <LinearGradient
-        colors={["rgba(239,255,249,0.34)", "rgba(172,224,208,0.09)"]}
-        style={styles.actionGradient}
-      >
-        <View
-          style={[
-            styles.actionIcon,
-            {
-              backgroundColor: `${color}35`,
-              borderColor: `${color}75`,
-            },
-          ]}
-        >
-          <Ionicons name={icon} size={21} color={color} />
-        </View>
-
-        <View style={styles.actionCopy}>
-          <Text style={styles.actionTitle}>{title}</Text>
-          <Text style={styles.actionDetail}>{detail}</Text>
-        </View>
-
-        <Ionicons
-          name={active ? "checkmark-circle" : "chevron-forward"}
-          size={21}
-          color={active ? color : "#8EB5AA"}
-        />
-      </LinearGradient>
-    </Pressable>
-  );
-}
-
-// 👈 4. 抽取小尺寸、不佔版面的單行星星評分子元件
 function StarRatingRow({
   label,
   value,
@@ -452,23 +810,17 @@ function StarRatingRow({
 }: {
   label: string;
   value: number;
-  onChange: (val: number) => void;
+  onChange: (v: number) => void;
 }) {
   return (
     <View style={styles.starRow}>
       <Text style={styles.starRowLabel}>{label}</Text>
       <View style={styles.starsGroup}>
-        {[1, 2, 3, 4, 5].map((starNumber) => (
-          <Pressable
-            key={starNumber}
-            accessibilityRole="button"
-            accessibilityLabel={`${label} ${starNumber} 顆星`}
-            onPress={() => onChange(starNumber)}
-            hitSlop={6}
-          >
+        {[1, 2, 3, 4, 5].map((num) => (
+          <Pressable key={num} onPress={() => onChange(num)} hitSlop={6}>
             <Ionicons
-              name={starNumber <= value ? "star" : "star-outline"}
-              size={22} // 👈 縮小為 22px，緊湊不佔空間
+              name={num <= value ? "star" : "star-outline"}
+              size={22}
               color="#F2C14E"
             />
           </Pressable>
@@ -479,268 +831,52 @@ function StarRatingRow({
   );
 }
 
-function PanelContent({
-  panel,
-  close,
-  sweetness,
-  setSweetness,
-  easiness,
-  setEasiness,
-  gains,
-  setGains,
-  comment,
-  setComment,
-  quizStep,
-  answers,
-  answer,
-  restartQuiz,
-  reminderOn,
-  setReminderOn,
-  evaluations,
-  loadingReviews,
-  onSubmitRating,
-  onReportReview,
-  onFocusComment,
-}: PanelContentProps) {
-  const isQuizFinished = answers.length === quizQuestions.length;
-
-  const getPanelTitle = (): string => {
-    switch (panel) {
-      case "rate":
-        return "給予課程評價";
-      case "quiz":
-        return "趣味心理測驗";
-      case "reviews":
-        return "結構化課程評價";
-      case "details":
-        return "課程詳細資訊";
-      case "reminder":
-        return "選課時程提醒";
-    }
-  };
-
+function Action({
+  title,
+  detail,
+  icon,
+  color,
+  active,
+  onPress,
+}: {
+  title: string;
+  detail: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  color: string;
+  active?: boolean;
+  onPress: () => void;
+}) {
   return (
-    <View style={styles.panel}>
-      <View style={styles.panelHeader}>
-        <Text style={styles.panelTitle}>{getPanelTitle()}</Text>
-
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="關閉"
-          onPress={close}
-          hitSlop={10}
+    <Pressable style={styles.actionButton} onPress={onPress}>
+      <LinearGradient
+        colors={["rgba(239,255,249,0.34)", "rgba(172,224,208,0.09)"]}
+        style={styles.actionGradient}
+      >
+        <View
+          style={[
+            styles.actionIcon,
+            { backgroundColor: `${color}35`, borderColor: `${color}75` },
+          ]}
         >
-          <Ionicons name="close" size={22} color="#D7F0E8" />
-        </Pressable>
-      </View>
-
-      {/* 5. 課程評分：緊湊三排小星星 */}
-      {panel === "rate" && (
-        <>
-          <Text style={styles.panelCopy}>使用者經驗設計 · 林怡君</Text>
-
-          <View style={styles.ratingSection}>
-            <StarRatingRow
-              label="甜度"
-              value={sweetness}
-              onChange={setSweetness}
-            />
-            <StarRatingRow
-              label="涼度"
-              value={easiness}
-              onChange={setEasiness}
-            />
-            <StarRatingRow label="收穫" value={gains} onChange={setGains} />
-          </View>
-
-          <Text style={styles.inputLabel}>心得與建議（限 30 字）</Text>
-          <TextInput
-            style={styles.commentInput}
-            value={comment}
-            onChangeText={setComment}
-            placeholder="例如：給分甜、期末專題認真做很有收穫！"
-            placeholderTextColor="#7BA79C"
-            maxLength={30}
-            multiline
-            onFocus={onFocusComment}
-          />
-          <Text style={styles.charCount}>{comment.length} / 30 字</Text>
-
-          <Pressable style={styles.primaryButton} onPress={onSubmitRating}>
-            <Text style={styles.primaryText}>送出評價</Text>
-          </Pressable>
-        </>
-      )}
-
-      {/* 心理測驗 */}
-      {panel === "quiz" && (
-        <>
-          {isQuizFinished ? (
-            <>
-              <Text style={styles.recommendKicker}>你的測驗報告</Text>
-              <Text style={styles.recommendTitle}>適合從「動手探索」開始</Text>
-              <Text style={styles.panelCopy}>
-                依你的回答，推薦你優先查看互動媒體程式設計與使用者經驗設計。
-              </Text>
-
-              <CourseRows />
-
-              <Pressable style={styles.secondaryButton} onPress={restartQuiz}>
-                <Text style={styles.secondaryText}>重新測驗</Text>
-              </Pressable>
-            </>
-          ) : (
-            <>
-              <Text style={styles.progress}>
-                第 {quizStep + 1} / {quizQuestions.length} 題
-              </Text>
-              <Text style={styles.question}>{quizQuestions[quizStep][0]}</Text>
-
-              <Pressable
-                style={styles.option}
-                onPress={() => answer(quizQuestions[quizStep][1])}
-              >
-                <Text style={styles.optionText}>
-                  {quizQuestions[quizStep][1]}
-                </Text>
-              </Pressable>
-
-              <Pressable
-                style={styles.option}
-                onPress={() => answer(quizQuestions[quizStep][2])}
-              >
-                <Text style={styles.optionText}>
-                  {quizQuestions[quizStep][2]}
-                </Text>
-              </Pressable>
-            </>
-          )}
-        </>
-      )}
-
-      {/* 結構化課程評價 */}
-      {panel === "reviews" && (
-        <>
-          {loadingReviews ? (
-            <Text
-              style={[
-                styles.panelCopy,
-                { textAlign: "center", paddingVertical: 20 },
-              ]}
-            >
-              載入課評中...
-            </Text>
-          ) : (
-            <View style={styles.courseList}>
-              {evaluations.map((item) => (
-                <View
-                  key={String(
-                    typeof item._id === "object" ? item._id.$oid : item._id
-                  )}
-                  style={styles.evaluationCard}
-                >
-                  <View style={styles.evaluationHeader}>
-                    <Text style={styles.courseName}>
-                      課程代號 #{item.course_id}
-                    </Text>
-                    <Text style={styles.statusBadge}>
-                      {item.evaluation_status || "已審核"}
-                    </Text>
-                  </View>
-
-                  <View style={styles.metricRow}>
-                    <Text style={styles.metricText}>
-                      甜度 {item.sweetness} ★
-                    </Text>
-                    <Text style={styles.metricDivider}>·</Text>
-                    <Text style={styles.metricText}>
-                      涼度 {item.easiness} ★
-                    </Text>
-                    <Text style={styles.metricDivider}>·</Text>
-                    <Text style={styles.metricText}>收穫 {item.gains} ★</Text>
-                  </View>
-
-                  <Text style={styles.commentText}>{item.comment}</Text>
-                </View>
-              ))}
-            </View>
-          )}
-
-          <Text style={styles.caption}>發現不當內容嗎？</Text>
-
-          <Pressable style={styles.reportButton} onPress={onReportReview}>
-            <Ionicons name="flag-outline" size={18} color="#FFBBB6" />
-            <Text style={styles.reportText}>檢舉不當課程評價</Text>
-          </Pressable>
-        </>
-      )}
-
-      {/* 課程詳細資訊 */}
-      {panel === "details" && <CourseRows details />}
-
-      {/* 選課提醒 */}
-      {panel === "reminder" && (
-        <>
-          <Text style={styles.panelCopy}>
-            開啟後，系統會在選課加退選與截止日前提醒你。
-          </Text>
-
-          <Pressable
-            style={[
-              styles.reminderToggle,
-              reminderOn && styles.reminderToggleOn,
-            ]}
-            onPress={() => setReminderOn(!reminderOn)}
-          >
-            <View>
-              <Text style={styles.optionText}>選課時程提醒</Text>
-              <Text style={styles.caption}>
-                {reminderOn ? "已開啟提醒" : "點擊開啟"}
-              </Text>
-            </View>
-
-            <Ionicons
-              name={reminderOn ? "notifications" : "notifications-outline"}
-              size={23}
-              color={reminderOn ? "#F2C14E" : "#C3E0D8"}
-            />
-          </Pressable>
-        </>
-      )}
-    </View>
-  );
-}
-
-function CourseRows({ review = false, details = false }: CourseRowsProps) {
-  return (
-    <View style={styles.courseList}>
-      {courses.map((course) => (
-        <View key={course.name} style={styles.courseRow}>
-          <View style={styles.courseIcon}>
-            <Ionicons
-              name={review ? "star" : "book-outline"}
-              size={17}
-              color={review ? "#F2C14E" : "#B6E3C2"}
-            />
-          </View>
-
-          <View style={styles.courseCopy}>
-            <Text style={styles.courseName}>{course.name}</Text>
-            <Text style={styles.courseMeta}>
-              {details
-                ? `${course.teacher} · ${course.time}`
-                : `整體評分 ${course.rating} · ${course.teacher}`}
-            </Text>
-          </View>
+          <Ionicons name={icon} size={21} color={color} />
         </View>
-      ))}
-    </View>
+        <View style={styles.actionCopy}>
+          <Text style={styles.actionTitle}>{title}</Text>
+          <Text style={styles.actionDetail}>{detail}</Text>
+        </View>
+        <Ionicons
+          name={active ? "checkmark-circle" : "chevron-forward"}
+          size={21}
+          color={active ? color : "#8EB5AA"}
+        />
+      </LinearGradient>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#16445A" },
-  safeArea: { flex: 1, paddingHorizontal: 24 },
+  safeArea: { flex: 1, paddingHorizontal: 20 },
   glow: { position: "absolute", borderRadius: 999, opacity: 0.48 },
   glowTop: {
     width: 260,
@@ -759,40 +895,35 @@ const styles = StyleSheet.create({
   backButton: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 7,
-    alignSelf: "flex-start",
+    gap: 6,
     paddingVertical: 12,
-    paddingRight: 14,
   },
   backText: { color: "#E9FFF7", fontSize: 14, fontWeight: "700" },
-  content: {
-    paddingTop: 10,
-  },
+  content: { paddingTop: 10 },
   kicker: {
     color: "#B4D8D2",
     fontSize: 11,
     letterSpacing: 1.7,
     fontWeight: "700",
   },
-  title: { color: "#F0FFF9", fontSize: 36, fontWeight: "800", marginTop: 10 },
+  title: { color: "#F0FFF9", fontSize: 34, fontWeight: "800", marginTop: 8 },
   description: {
     color: "#C3E0D8",
-    fontSize: 15,
-    lineHeight: 23,
-    marginTop: 12,
-    maxWidth: 330,
+    fontSize: 14,
+    lineHeight: 22,
+    marginTop: 10,
   },
   sectionTitle: {
     color: "#F0FFF9",
     fontSize: 18,
     fontWeight: "800",
-    marginTop: 32,
-    marginBottom: 13,
+    marginTop: 26,
+    marginBottom: 12,
   },
   actionList: { gap: 11 },
   actionButton: { borderRadius: 20, overflow: "hidden" },
   actionGradient: {
-    minHeight: 76,
+    minHeight: 74,
     flexDirection: "row",
     alignItems: "center",
     padding: 14,
@@ -801,8 +932,8 @@ const styles = StyleSheet.create({
     borderRadius: 20,
   },
   actionIcon: {
-    width: 43,
-    height: 43,
+    width: 42,
+    height: 42,
     borderRadius: 14,
     borderWidth: 1,
     alignItems: "center",
@@ -812,10 +943,10 @@ const styles = StyleSheet.create({
   actionTitle: { color: "#F0FFF9", fontSize: 15, fontWeight: "800" },
   actionDetail: { color: "#A9CEC3", fontSize: 12, marginTop: 4 },
   panel: {
-    marginTop: 28,
+    marginTop: 24,
     padding: 18,
     borderRadius: 22,
-    backgroundColor: "rgba(11,49,63,0.75)",
+    backgroundColor: "rgba(11,49,63,0.85)",
     borderWidth: 1,
     borderColor: "rgba(236,255,248,0.3)",
   },
@@ -823,25 +954,37 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: 14,
   },
   panelTitle: { color: "#F0FFF9", fontSize: 18, fontWeight: "800" },
-  panelCopy: {
-    color: "#B8D8D0",
-    fontSize: 13,
-    lineHeight: 20,
-    marginTop: 13,
+  panelCopy: { color: "#B8D8D0", fontSize: 13, lineHeight: 20 },
+  inputLabel: {
+    color: "#C3E0D8",
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 6,
+    marginTop: 10,
   },
 
-  /* 👈 緊湊型星星評分樣式 */
+  dropdownBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(8,47,61,0.55)",
+    borderWidth: 1,
+    borderColor: "rgba(236,255,248,0.28)",
+    borderRadius: 14,
+    padding: 12,
+  },
+  dropdownCourseTitle: { color: "#F0FFF9", fontSize: 15, fontWeight: "800" },
+  dropdownCourseSub: { color: "#9AD8ED", fontSize: 11, marginTop: 3 },
+
   ratingSection: {
     backgroundColor: "rgba(8,47,61,0.35)",
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "rgba(236,255,248,0.18)",
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    marginTop: 14,
-    marginBottom: 14,
+    padding: 12,
+    marginVertical: 12,
     gap: 8,
   },
   starRow: {
@@ -853,13 +996,9 @@ const styles = StyleSheet.create({
     color: "#E9FFF7",
     fontSize: 13,
     fontWeight: "700",
-    width: 42,
+    width: 40,
   },
-  starsGroup: {
-    flexDirection: "row",
-    gap: 7,
-    alignItems: "center",
-  },
+  starsGroup: { flexDirection: "row", gap: 6 },
   starRowValue: {
     color: "#F2C14E",
     fontSize: 12,
@@ -868,12 +1007,6 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
 
-  inputLabel: {
-    color: "#C3E0D8",
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 8,
-  },
   commentInput: {
     backgroundColor: "rgba(8,47,61,0.45)",
     borderWidth: 1,
@@ -882,21 +1015,21 @@ const styles = StyleSheet.create({
     padding: 12,
     color: "#F0FFF9",
     fontSize: 14,
-    minHeight: 70,
+    minHeight: 65,
     textAlignVertical: "top",
   },
   charCount: {
     color: "#A9CEC3",
     fontSize: 11,
     textAlign: "right",
-    marginTop: 5,
-    marginBottom: 16,
+    marginTop: 4,
+    marginBottom: 12,
   },
   primaryButton: {
     alignItems: "center",
     backgroundColor: "#F2C14E",
     borderRadius: 13,
-    paddingVertical: 13,
+    paddingVertical: 12,
   },
   primaryText: { color: "#16445A", fontWeight: "800" },
   secondaryButton: {
@@ -908,11 +1041,83 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   secondaryText: { color: "#C3E0D8", fontSize: 13, fontWeight: "800" },
+
+  filterTitle: {
+    color: "#B4D8D2",
+    fontSize: 11,
+    fontWeight: "700",
+    marginTop: 8,
+    marginBottom: 6,
+  },
+  pillRow: { flexDirection: "row", marginBottom: 6 },
+  pill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: "rgba(239,255,249,0.08)",
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: "rgba(236,255,248,0.2)",
+  },
+  pillActive: { backgroundColor: "#F2C14E", borderColor: "#F2C14E" },
+  pillText: { color: "#C3E0D8", fontSize: 12, fontWeight: "600" },
+  pillTextActive: { color: "#16445A", fontWeight: "800" },
+  divider: {
+    height: 1,
+    backgroundColor: "rgba(236,255,248,0.15)",
+    marginVertical: 12,
+  },
+
+  courseReviewCard: {
+    backgroundColor: "rgba(8,47,61,0.6)",
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(236,255,248,0.18)",
+  },
+  cardHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 8,
+  },
+  courseCardName: { color: "#F0FFF9", fontSize: 15, fontWeight: "800" },
+  courseCardMeta: { color: "#9AD8ED", fontSize: 11, marginTop: 2 },
+  badge: {
+    backgroundColor: "rgba(154,216,237,0.18)",
+    color: "#9AD8ED",
+    fontSize: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    fontWeight: "700",
+  },
+  noEvalText: {
+    color: "rgba(240,255,249,0.45)",
+    fontSize: 11,
+    fontStyle: "italic",
+    marginTop: 4,
+  },
+  singleEval: {
+    borderTopWidth: 1,
+    borderColor: "rgba(236,255,248,0.1)",
+    paddingTop: 8,
+    marginTop: 8,
+  },
+  evalScoreRow: { flexDirection: "row", gap: 10, marginBottom: 4 },
+  scoreText: { color: "#F2C14E", fontSize: 11, fontWeight: "700" },
+  evalCommentText: {
+    color: "rgba(240,255,249,0.88)",
+    fontSize: 12,
+    lineHeight: 17,
+  },
+
   progress: {
     color: "#8FD5C4",
     fontSize: 12,
     fontWeight: "700",
-    marginTop: 18,
+    marginTop: 12,
   },
   question: {
     color: "#F0FFF9",
@@ -935,97 +1140,43 @@ const styles = StyleSheet.create({
     color: "#F2C14E",
     fontSize: 12,
     fontWeight: "800",
-    marginTop: 17,
+    marginTop: 14,
   },
-  recommendTitle: { color: "#F0FFF9", fontSize: 19, fontWeight: "800" },
-  courseList: { gap: 9, marginTop: 16 },
-  courseRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 11,
-    borderRadius: 13,
-    backgroundColor: "rgba(239,255,249,0.08)",
-  },
-  courseIcon: {
-    width: 31,
-    height: 31,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: 10,
-    backgroundColor: "rgba(239,255,249,0.1)",
-  },
-  courseCopy: { flex: 1, marginLeft: 10 },
-  courseName: { color: "#F0FFF9", fontSize: 14, fontWeight: "700" },
-  courseMeta: { color: "#A9CEC3", fontSize: 11, marginTop: 3 },
-  caption: {
-    color: "#A9CEC3",
-    fontSize: 12,
-    marginTop: 17,
-    marginBottom: 8,
-  },
-  reportButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    borderRadius: 13,
-    borderWidth: 1,
-    borderColor: "rgba(255,187,182,0.55)",
-    paddingVertical: 12,
-  },
-  reportText: { color: "#FFBBB6", fontSize: 13, fontWeight: "800" },
-  reminderToggle: {
-    marginTop: 19,
-    padding: 14,
-    borderRadius: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    backgroundColor: "rgba(239,255,249,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(236,255,248,0.2)",
-  },
-  reminderToggleOn: {
-    borderColor: "rgba(242,193,78,0.75)",
-    backgroundColor: "rgba(242,193,78,0.13)",
-  },
-  evaluationCard: {
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: "rgba(239,255,249,0.08)",
-    borderWidth: 1,
-    borderColor: "rgba(236,255,248,0.2)",
-    marginBottom: 10,
-  },
-  evaluationHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  statusBadge: {
-    fontSize: 11,
-    color: "#9AD8ED",
-    backgroundColor: "rgba(154,216,237,0.15)",
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-    fontWeight: "700",
-  },
-  metricRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  recommendTitle: {
+    color: "#F0FFF9",
+    fontSize: 18,
+    fontWeight: "800",
     marginVertical: 6,
   },
-  metricText: { color: "#F2C14E", fontSize: 12, fontWeight: "700" },
-  metricDivider: {
-    color: "rgba(240,255,249,0.4)",
-    marginHorizontal: 6,
+
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.65)",
   },
-  commentText: {
-    color: "rgba(240,255,249,0.85)",
-    fontSize: 13,
-    lineHeight: 18,
-    fontStyle: "italic",
-    marginTop: 2,
+  modalContent: {
+    backgroundColor: "#123A4E",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
   },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 14,
+  },
+  modalTitle: { color: "#F0FFF9", fontSize: 17, fontWeight: "800" },
+  courseSelectItem: {
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderColor: "rgba(236,255,248,0.12)",
+  },
+  courseSelectItemActive: {
+    backgroundColor: "rgba(242,193,78,0.15)",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+  },
+  courseSelectName: { color: "#F0FFF9", fontSize: 15, fontWeight: "700" },
+  courseSelectDetail: { color: "#9AD8ED", fontSize: 12, marginTop: 3 },
 });
