@@ -42,6 +42,28 @@ def get_evaluations():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+from pydantic import BaseModel
+
+class EvaluationCreate(BaseModel):
+    course_id: int
+    user_id: int
+    sweetness: float
+    easiness: float
+    gains: float
+    comment: str
+    evaluation_status: str = "已審核"
+
+@app.post("/api/evaluations")
+def create_evaluation(eval_data: EvaluationCreate):
+    try:
+        collection = db["COURSE_EVALUATION"]
+        new_eval = eval_data.dict()
+        result = collection.insert_one(new_eval)
+        new_eval["_id"] = str(result.inserted_id)
+        return {"success": True, "message": "評價儲存成功", "data": new_eval}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/api/login")
 def login(req: LoginRequest):
     try:
