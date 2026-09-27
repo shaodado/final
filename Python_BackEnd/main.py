@@ -119,15 +119,39 @@ def get_student_feed(user_id: int):
 # -------------------------------------------------------------
 # 3. 課程評價模組 (Evaluations)
 # -------------------------------------------------------------
+# 3. 課程評價模組：支援特定課程篩選與分頁 (預設每頁 20 筆)
 @app.get("/api/evaluations")
-def get_evaluations():
+def get_evaluations(
+    course_id: Optional[int] = None,
+    page: int = 1,
+    limit: int = 20
+):
     try:
         collection = db["COURSE_EVALUATION"]
-        evaluations = []
-        for doc in collection.find():
+        query = {}
+        if course_id is not None:
+            query["course_id"] = course_id
+
+        # 計算該課程在資料庫中的總評價數
+        total_count = collection.count_documents(query)
+        # 計算總頁數
+        total_pages = max(1, (total_count + limit - 1) // limit) if total_count > 0 else 1
+        skip = max(0, (page - 1) * limit)
+
+        # 依最新時間倒序排列，並精準跳過 (skip) 與限制 (limit) 20 筆
+        docs = list(collection.find(query).sort("_id", -1).skip(skip).limit(limit))
+        for doc in docs:
             doc["_id"] = str(doc["_id"])
-            evaluations.append(doc)
-        return {"success": True, "count": len(evaluations), "data": evaluations}
+
+        return {
+            "success": True,
+            "data": docs,
+            "count": len(docs),
+            "total_count": total_count,
+            "page": page,
+            "total_pages": total_pages,
+            "limit": limit
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -147,24 +171,45 @@ def create_evaluation(eval_data: EvaluationCreate):
 # -------------------------------------------------------------
 
 # (A) 取得學生已修課程（供評分下拉選單選擇）
+# (A) 取得學生已修課程（支援每頁 20 筆分頁查詢）
 @app.get("/api/student/my-courses")
-def get_student_courses(user_id: int):
+def get_student_courses(
+    user_id: int,
+    page: int = 1,
+    limit: int = 20
+):
     try:
-        # 1. 查詢學生歷年成績/修課紀錄 (STUDENT_ACADEMIC_RECORD)
+        # 1. 查詢學生歷年修課紀錄 (STUDENT_ACADEMIC_RECORD)
         records = list(db["STUDENT_ACADEMIC_RECORD"].find({"user_id": user_id}))
         course_ids = [r["course_id"] for r in records if "course_id" in r]
 
-        # 2. 依 course_ids 從 COURSE 集合取得課程詳情
-        courses = list(db["COURSE"].find({"course_id": {"$in": course_ids}}))
+        courses_col = db["COURSE"]
+        query = {"course_id": {"$in": course_ids}} if course_ids else {"course_id": -999}
+
+        # 2. 計算總筆數、總頁數與 skip 偏移量
+        total_count = courses_col.count_documents(query) if course_ids else 0
+        total_pages = max(1, (total_count + limit - 1) // limit) if total_count > 0 else 1
+        skip = max(0, (page - 1) * limit)
+
+        # 3. 取得該頁課程資料
+        courses = list(courses_col.find(query).skip(skip).limit(limit)) if course_ids else []
 
         for c in courses:
             c["_id"] = str(c["_id"])
-            c.setdefault("teacher", "林老師")
+            c.setdefault("teacher", "專任教師")
             c.setdefault("department", c.get("domain", "資訊工程學系"))
             c.setdefault("grade", "大三")
             c.setdefault("category", "必修")
 
-        return {"success": True, "data": courses}
+        return {
+            "success": True,
+            "data": courses,
+            "count": len(courses),
+            "total_count": total_count,
+            "page": page,
+            "total_pages": total_pages,
+            "limit": limit
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
