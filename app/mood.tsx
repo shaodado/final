@@ -773,7 +773,7 @@ export default function MoodScreen() {
                   <Ionicons name="close" size={24} color="#F0FFF9" />
                 </Pressable>
               </View>
-              <ScrollView style={{ maxHeight: 300 }}>
+              <ScrollView style={{ flex: 1 }}>
                 {myCourses.map((c) => (
                   <Pressable
                     key={c.course_id}
@@ -1159,6 +1159,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     padding: 20,
+    height: "50%",
   },
   modalHeader: {
     flexDirection: "row",
