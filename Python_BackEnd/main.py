@@ -101,27 +101,43 @@ def login(req: LoginRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # -------------------------------------------------------------
-# 2. 動態聯絡簿模組 (Feed)
+# 2. 動態聯絡簿模組 (Feed) - 正式單一版本
 # -------------------------------------------------------------
 @app.get("/api/student/feed")
 def get_student_feed(user_id: int):
     try:
-        collection_names = db.list_collection_names()
-        target_col = None
-        if "NOTIFY" in collection_names:
-            target_col = db["NOTIFY"]
-        elif "ANNOUNCEMENT" in collection_names:
-            target_col = db["ANNOUNCEMENT"]
+        # 1. 查詢該學生已修或修習中的課程代號
+        records = list(db["STUDENT_ACADEMIC_RECORD"].find({"user_id": user_id}))
+        my_course_ids = [r["course_id"] for r in records if "course_id" in r]
+
+        col = db["NOTIFY"]
+        # 2. 篩選：學生有修的課 (如 101) 或 全校通知 (course_id 為 None)
+        query = {
+            "$or": [
+                {"course_id": {"$in": my_course_ids}},
+                {"course_id": None}
+            ]
+        } if my_course_ids else {}
+
+        docs = list(col.find(query).sort("_id", -1).limit(10))
 
         feeds = []
-        if target_col is not None:
-            docs = list(target_col.find().sort("_id", -1).limit(5))
-            for doc in docs:
-                feeds.append({
-                    "icon": "megaphone-outline",
-                    "text": doc.get("title") or doc.get("content") or "課堂公告",
-                    "time": str(doc.get("created_at", "最新"))
-                })
+        for doc in docs:
+            icon_map = {
+                "作業提醒": "document-text-outline",
+                "小考時程": "alert-circle-outline",
+                "課堂公告": "megaphone-outline",
+            }
+            icon = icon_map.get(doc.get("type"), "megaphone-outline")
+
+            feeds.append({
+                "id": str(doc["_id"]),
+                "icon": icon,
+                "title": doc.get("title") or "課堂公告",  # 👈 正確輸出標題
+                "content": doc.get("content", ""),      # 👈 正確輸出內文
+                "time": str(doc.get("published_at") or doc.get("update_time") or "最新"),
+                "course_id": doc.get("course_id")
+            })
 
         return {"success": True, "user_id": user_id, "data": feeds}
     except Exception as e:
@@ -306,30 +322,3 @@ def delete_announcement(announcement_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# 4. 學生端：動態聯絡簿讀取專屬通知（確保讀取 NOTIFY 集合）
-@app.get("/api/student/feed")
-def get_student_feed(user_id: int):
-    try:
-        # 查詢該學生已修或修習中的課程代號
-        records = list(db["STUDENT_ACADEMIC_RECORD"].find({"user_id": user_id}))
-        my_course_ids = [r["course_id"] for r in records if "course_id" in r]
-
-        col = db["NOTIFY"]
-        # 篩選條件：學生有選修的課程 (如 101) 或是 全校廣播公告 (course_id 為 None)
-        query = {"course_id": {"$in": my_course_ids}} if my_course_ids else {}
-        docs = list(col.find(query).sort("_id", -1).limit(10))
-
-        feeds = []
-        for doc in docs:
-            feeds.append({
-                "id": str(doc["_id"]),
-                "icon": "megaphone-outline",
-                "title": doc.get("title", "課堂公告"),
-                "text": doc.get("content") or doc.get("title", ""),
-                "time": str(doc.get("published_at") or doc.get("update_time") or "最新"),
-                "course_id": doc.get("course_id")
-            })
-
-        return {"success": True, "user_id": user_id, "data": feeds}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))

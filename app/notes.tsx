@@ -39,17 +39,20 @@ const defaultAgenda = [
 const defaultFeeds = [
   {
     icon: "megaphone-outline",
-    text: "使用者經驗設計：期中提案繳交期限延至週五。",
+    title: "期中提案延期",
+    content: "使用者經驗設計：期中提案繳交期限延至週五。",
     time: "10 分鐘前",
   },
   {
     icon: "calendar-outline",
-    text: "資料視覺化：下週課程改為線上同步授課。",
+    title: "上課方式異動",
+    content: "資料視覺化：下週課程改為線上同步授課。",
     time: "昨天",
   },
   {
     icon: "document-text-outline",
-    text: "數位文化研究：本週閱讀資料已上傳。",
+    title: "課堂資料更新",
+    content: "數位文化研究：本週閱讀資料已上傳至教學平台。",
     time: "週一",
   },
 ];
@@ -72,7 +75,7 @@ export default function NotesScreen() {
   const [feedList, setFeedList] = useState<any[]>(defaultFeeds);
   const [loadingFeed, setLoadingFeed] = useState(false);
 
-  // 使用者點擊按鈕或重新整理時呼叫（事件觸發，允許顯示 Loading 動畫）
+  // 使用者手動點擊或重新整理時呼叫
   const fetchStudentFeed = async () => {
     try {
       setLoadingFeed(true);
@@ -97,7 +100,7 @@ export default function NotesScreen() {
     }
   };
 
-  // 元件載入時在背景非同步預抓資料（不觸發同步 setState，符合 React 19 與 ESLint 規範）
+  // 背景預載（符合 ESLint 規範，杜絕串聯渲染警告）
   useEffect(() => {
     let isMounted = true;
 
@@ -115,7 +118,7 @@ export default function NotesScreen() {
           setFeedList(data.data);
         }
       } catch {
-        // 背景預載失敗時保持 defaultFeeds
+        // 預設保持 defaultFeeds
       }
     };
 
@@ -309,9 +312,10 @@ function PanelView({
           ) : feedList.length > 0 ? (
             feedList.map((item, idx) => (
               <Feed
-                key={idx}
+                key={item.id || idx}
                 icon={item.icon || "megaphone-outline"}
-                text={item.text || item.title || item.content}
+                title={item.title || "課堂公告"}
+                content={item.content || item.text || ""}
                 time={item.time || "最新通知"}
               />
             ))
@@ -405,20 +409,23 @@ function PanelView({
 
 function Feed({
   icon,
-  text,
+  title,
+  content,
   time,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
-  text: string;
+  title: string;
+  content: string;
   time: string;
 }) {
   return (
     <View style={styles.feed}>
       <View style={styles.feedIcon}>
-        <Ionicons name={icon} size={17} color="#9AD8ED" />
+        <Ionicons name={icon} size={18} color="#9AD8ED" />
       </View>
       <View style={styles.itemCopy}>
-        <Text style={styles.feedText}>{text}</Text>
+        <Text style={styles.feedTitleText}>{title}</Text>
+        {content ? <Text style={styles.feedContentText}>{content}</Text> : null}
         <Text style={styles.itemMeta}>{time}</Text>
       </View>
     </View>
@@ -517,24 +524,32 @@ const styles = StyleSheet.create({
     paddingVertical: 13,
     borderBottomWidth: 1,
     borderColor: "rgba(236,255,248,0.14)",
+    alignItems: "flex-start",
   },
   feedIcon: {
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(154,216,237,0.14)",
+    marginTop: 2,
   },
-  itemCopy: { flex: 1, marginLeft: 10 },
-  feedText: {
+  itemCopy: { flex: 1, marginLeft: 12 },
+  feedTitleText: {
     color: "#F0FFF9",
+    fontSize: 15,
+    fontWeight: "800",
+    marginBottom: 4,
+  },
+  feedContentText: {
+    color: "#D7EFE7",
     fontSize: 13,
-    fontWeight: "600",
     lineHeight: 19,
+    marginBottom: 4,
   },
   itemTitle: { color: "#F0FFF9", fontSize: 13, fontWeight: "700" },
-  itemMeta: { color: "#A9CEC3", fontSize: 11, marginTop: 4 },
+  itemMeta: { color: "#A9CEC3", fontSize: 11 },
   assignment: {
     flexDirection: "row",
     alignItems: "center",
