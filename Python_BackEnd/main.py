@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import get_database
 from pydantic import BaseModel
 from typing import Optional
+from datetime import datetime
+from bson import ObjectId
 
 # 登入請求規格
 class LoginRequest(BaseModel):
@@ -18,6 +20,15 @@ class EvaluationCreate(BaseModel):
     gains: float
     comment: str
     evaluation_status: str = "已審核"
+
+    # 老師發布公告請求規格
+class AnnouncementCreate(BaseModel):
+    title: str
+    content: str
+    expires_at: str
+    course_id: Optional[int] = 101       # 預設為老師教授的 101 資料庫管理
+    teacher_id: Optional[int] = 1001
+    type: str = "課堂公告"
 
 app = FastAPI(
     title="Campus Smart Assistant API",
@@ -238,5 +249,87 @@ def search_courses(
             c.setdefault("category", "選修")
 
         return {"success": True, "count": len(courses), "data": courses}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # 1. 老師端：發布公告並寫入 NOTIFY 集合
+@app.post("/api/announcements")
+def create_announcement(data: AnnouncementCreate):
+    try:
+        col = db["NOTIFY"]
+        doc = {
+            "title": data.title,
+            "content": data.content,
+            "course_id": data.course_id,
+            "teacher_id": data.teacher_id,
+            "due_date": data.expires_at,
+            "type": data.type,
+            "update_time": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "published_at": datetime.now().strftime("%Y年%m月%d日")
+        }
+        result = col.insert_one(doc)
+        doc["_id"] = str(result.inserted_id)
+        return {"success": True, "message": "公告已發布至雲端", "data": doc}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # 2. 老師端：讀取歷史公告清單
+@app.get("/api/teacher/announcements")
+def get_teacher_announcements(teacher_id: int = 1001):
+    try:
+        col = db["NOTIFY"]
+        # 撈出該老師發布或指定課程的公告，依最新時間排序
+        docs = list(col.find({"$or": [{"teacher_id": teacher_id}, {"course_id": 101}]}).sort("_id", -1))
+        announcements = []
+        for d in docs:
+            announcements.append({
+                "id": str(d["_id"]),
+                "title": d.get("title", ""),
+                "content": d.get("content", ""),
+                "expiresAt": str(d.get("due_date", "未設定")),
+                "publishedAt": str(d.get("published_at", d.get("update_time", "最新"))),
+                "course_id": d.get("course_id")
+            })
+        return {"success": True, "data": announcements}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+    # 3. 老師端：刪除公告
+@app.delete("/api/announcements/{announcement_id}")
+def delete_announcement(announcement_id: str):
+    try:
+        col = db["NOTIFY"]
+        result = col.delete_one({"_id": ObjectId(announcement_id)})
+        if result.deleted_count > 0:
+            return {"success": True, "message": "公告已成功刪除"}
+        return {"success": False, "message": "找不到該公告"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 4. 學生端：動態聯絡簿讀取專屬通知（確保讀取 NOTIFY 集合）
+@app.get("/api/student/feed")
+def get_student_feed(user_id: int):
+    try:
+        # 查詢該學生已修或修習中的課程代號
+        records = list(db["STUDENT_ACADEMIC_RECORD"].find({"user_id": user_id}))
+        my_course_ids = [r["course_id"] for r in records if "course_id" in r]
+
+        col = db["NOTIFY"]
+        # 篩選條件：學生有選修的課程 (如 101) 或是 全校廣播公告 (course_id 為 None)
+        query = {"course_id": {"$in": my_course_ids}} if my_course_ids else {}
+        docs = list(col.find(query).sort("_id", -1).limit(10))
+
+        feeds = []
+        for doc in docs:
+            feeds.append({
+                "id": str(doc["_id"]),
+                "icon": "megaphone-outline",
+                "title": doc.get("title", "課堂公告"),
+                "text": doc.get("content") or doc.get("title", ""),
+                "time": str(doc.get("published_at") or doc.get("update_time") or "最新"),
+                "course_id": doc.get("course_id")
+            })
+
+        return {"success": True, "user_id": user_id, "data": feeds}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
