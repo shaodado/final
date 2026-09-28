@@ -27,44 +27,12 @@ type Announcement = {
   course_id?: number;
 };
 
-type SchoolAnnouncement = {
-  id: string;
-  title: string;
-  content: string;
-  publishedAt: string;
-};
-
-type AnnouncementTab = "school" | "my";
-
-/* 校級全校廣播公告 */
-const schoolAnnouncements: SchoolAnnouncement[] = [
-  {
-    id: "school-001",
-    title: "114學年度第一學期開學公告",
-    content:
-      "114學年度第一學期即將開始，請同學留意選課、加退選及課程相關公告。",
-    publishedAt: "2026年08月20日",
-  },
-  {
-    id: "school-002",
-    title: "校園安全宣導",
-    content: "請同學注意校園安全，離開教室時請確認門窗及電源是否關閉。",
-    publishedAt: "2026年08月18日",
-  },
-  {
-    id: "school-003",
-    title: "學校系統維護通知",
-    content: "學校相關系統將於近期進行維護，維護期間部分服務可能暫時無法使用。",
-    publishedAt: "2026年08月15日",
-  },
-];
-
 export default function TeacherAnnouncementsScreen() {
   const router = useRouter();
   const { userId } = useAuth();
   const currentTeacherId = userId || 1001;
 
-  // 接收路由傳進來的當前課程 ID 與名稱
+  // 取得從上一頁傳進來的特定課程代碼與名稱
   const params = useLocalSearchParams<{
     courseId?: string;
     courseName?: string;
@@ -76,8 +44,6 @@ export default function TeacherAnnouncementsScreen() {
   const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [activeTab, setActiveTab] = useState<AnnouncementTab>("school");
-
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
@@ -86,7 +52,7 @@ export default function TeacherAnnouncementsScreen() {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // 初次載入公告：只載入該門課程 (currentCourseId) 的公告
+  // 初次載入公告：精準撈取本課程的資料
   useEffect(() => {
     let isMounted = true;
 
@@ -100,7 +66,7 @@ export default function TeacherAnnouncementsScreen() {
           setAnnouncements(json.data);
         }
       } catch (error) {
-        console.error("載入雲端公告失敗：", error);
+        console.error("載入課程公告失敗：", error);
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -127,7 +93,7 @@ export default function TeacherAnnouncementsScreen() {
         setAnnouncements(json.data);
       }
     } catch (error) {
-      console.error("載入雲端公告失敗：", error);
+      console.error("載入課程公告失敗：", error);
       Alert.alert("連線提醒", "無法從資料庫同步公告，請確認後端運行中。");
     } finally {
       setIsLoading(false);
@@ -177,7 +143,7 @@ export default function TeacherAnnouncementsScreen() {
     }
   };
 
-  // 發布公告：綁定當前課程 ID
+  // 發布公告：動態綁定當前課程 ID
   const handlePublish = async (): Promise<void> => {
     if (!title.trim()) {
       Alert.alert("提醒", "請輸入公告主題。");
@@ -200,7 +166,7 @@ export default function TeacherAnnouncementsScreen() {
           title: title.trim(),
           content: content.trim(),
           expires_at: expiresAt,
-          course_id: currentCourseId, // 👈 動態綁定所選課程 ID
+          course_id: currentCourseId,
           teacher_id: currentTeacherId,
           type: "課堂公告",
         }),
@@ -214,10 +180,9 @@ export default function TeacherAnnouncementsScreen() {
         setSelectedDate(null);
         setShowDatePicker(false);
         setShowForm(false);
-        setActiveTab("my");
         Alert.alert(
           "發布成功",
-          `公告已同步至《${currentCourseName}》，修課學生已可即時查閱！`
+          `公告已成功同步至《${currentCourseName}》，修課學生已可即時查閱！`
         );
         reloadAnnouncements();
       } else {
@@ -281,7 +246,7 @@ export default function TeacherAnnouncementsScreen() {
           </Pressable>
           <View style={{ alignItems: "center" }}>
             <Text style={styles.title}>{currentCourseName}</Text>
-            <Text style={styles.subTitle}>課程公告管理</Text>
+            <Text style={styles.subTitle}>課堂公告專區</Text>
           </View>
           <Pressable
             style={styles.addButton}
@@ -296,54 +261,15 @@ export default function TeacherAnnouncementsScreen() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={styles.content}
         >
+          {/* 本課程公告統計卡片 */}
           <View style={styles.summaryCard}>
             <View>
-              <Text style={styles.summaryLabel}>本課公告</Text>
-              <Text style={styles.summaryValue}>{totalAnnouncements}</Text>
-            </View>
-            <View>
-              <Text style={styles.summaryLabel}>校級公告</Text>
-              <Text style={styles.summaryValue}>
-                {schoolAnnouncements.length}
-              </Text>
+              <Text style={styles.summaryLabel}>已發布課堂公告</Text>
+              <Text style={styles.summaryValue}>{totalAnnouncements} 則</Text>
             </View>
           </View>
 
-          <View style={styles.tabContainer}>
-            <Pressable
-              style={[
-                styles.tabButton,
-                activeTab === "school" && styles.tabButtonActive,
-              ]}
-              onPress={() => setActiveTab("school")}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === "school" && styles.tabTextActive,
-                ]}
-              >
-                校級公告
-              </Text>
-            </Pressable>
-            <Pressable
-              style={[
-                styles.tabButton,
-                activeTab === "my" && styles.tabButtonActive,
-              ]}
-              onPress={() => setActiveTab("my")}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === "my" && styles.tabTextActive,
-                ]}
-              >
-                本課歷史公告
-              </Text>
-            </Pressable>
-          </View>
-
+          {/* 新增公告表單 */}
           {showForm && (
             <LinearGradient
               colors={["rgba(239,255,249,0.28)", "rgba(172,224,208,0.10)"]}
@@ -425,33 +351,8 @@ export default function TeacherAnnouncementsScreen() {
             <Text style={styles.emptyText}>正在同步雲端公告...</Text>
           )}
 
+          {/* 歷史課堂公告清單 */}
           {!isLoading &&
-            activeTab === "school" &&
-            schoolAnnouncements.map((announcement) => (
-              <LinearGradient
-                key={announcement.id}
-                colors={["rgba(239,255,249,0.28)", "rgba(172,224,208,0.10)"]}
-                style={styles.announcementCard}
-              >
-                <View style={styles.cardHeader}>
-                  <View style={styles.schoolTag}>
-                    <Text style={styles.schoolTagText}>校級</Text>
-                  </View>
-                  <Text style={styles.metaText}>
-                    {announcement.publishedAt}
-                  </Text>
-                </View>
-                <Text style={styles.announcementTitle}>
-                  {announcement.title}
-                </Text>
-                <Text style={styles.announcementContent}>
-                  {announcement.content}
-                </Text>
-              </LinearGradient>
-            ))}
-
-          {!isLoading &&
-            activeTab === "my" &&
             announcements.map((announcement) => {
               const expired = isExpired(announcement.expiresAt);
               return (
@@ -493,7 +394,7 @@ export default function TeacherAnnouncementsScreen() {
               );
             })}
 
-          {!isLoading && activeTab === "my" && announcements.length === 0 && (
+          {!isLoading && announcements.length === 0 && (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyTitle}>本課程尚無公告</Text>
               <Text style={styles.emptyText}>
@@ -555,8 +456,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(236,255,248,0.25)",
     padding: 16,
-    flexDirection: "row",
-    justifyContent: "space-around",
     alignItems: "center",
     marginBottom: 18,
   },
@@ -573,23 +472,6 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     textAlign: "center",
   },
-  tabContainer: {
-    flexDirection: "row",
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: 14,
-    padding: 4,
-    marginBottom: 18,
-  },
-  tabButton: {
-    flex: 1,
-    paddingVertical: 11,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tabButtonActive: { backgroundColor: "#F2C14E" },
-  tabText: { color: "#D6EEE7", fontSize: 14, fontWeight: "700" },
-  tabTextActive: { color: "#16445A", fontWeight: "800" },
   formCard: {
     borderRadius: 20,
     borderWidth: 1,
@@ -672,13 +554,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 10,
   },
-  schoolTag: {
-    backgroundColor: "rgba(242,193,78,0.2)",
-    borderRadius: 8,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-  },
-  schoolTagText: { color: "#F2C14E", fontSize: 11, fontWeight: "800" },
   statusTag: { borderRadius: 8, paddingHorizontal: 9, paddingVertical: 4 },
   activeTag: { backgroundColor: "rgba(172,224,208,0.2)" },
   expiredTag: { backgroundColor: "rgba(242,140,140,0.2)" },

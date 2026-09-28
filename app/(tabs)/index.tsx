@@ -1,8 +1,17 @@
+import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-
 import { useAuth } from "../_layout";
 
 type BubblePosition = "right" | "left" | "center";
@@ -13,6 +22,16 @@ type Bubble = {
   route: string;
   position: BubblePosition;
 };
+
+type SchoolAnnouncement = {
+  id: string;
+  title: string;
+  content: string;
+  publishedAt: string;
+};
+
+// 學生專屬已讀快取 Key
+const STUDENT_LAST_READ_KEY = "@student_last_read_school_announcement";
 
 const bubbles: Bubble[] = [
   {
@@ -39,6 +58,58 @@ export default function HomeScreen() {
   const router = useRouter();
   const { signOut, userName } = useAuth();
 
+  // @ts-ignore
+  const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+  const [schoolAnnouncements, setSchoolAnnouncements] = useState<
+    SchoolAnnouncement[]
+  >([]);
+  const [showSchoolModal, setShowSchoolModal] = useState<boolean>(false);
+  const [hasUnread, setHasUnread] = useState<boolean>(false);
+
+  // 進入畫面時向後端查詢最新校級公告，並比對學生端未讀紅點
+  useEffect(() => {
+    let isMounted = true;
+
+    const checkSchoolAnnouncements = async () => {
+      try {
+        const res = await fetch(`${baseUrl}/api/announcements/school`);
+        const json = await res.json();
+        if (json.success && json.data && json.data.length > 0) {
+          if (isMounted) setSchoolAnnouncements(json.data);
+
+          const latestId = json.data[0]?.id;
+          const lastReadId = await AsyncStorage.getItem(STUDENT_LAST_READ_KEY);
+
+          if (isMounted) {
+            setHasUnread(Boolean(latestId && latestId !== lastReadId));
+          }
+        }
+      } catch (error) {
+        console.warn("無法取得最新校級公告:", error);
+      }
+    };
+
+    checkSchoolAnnouncements();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [baseUrl]);
+
+  // 點開鈴鐺：顯示 Modal 並消除紅點（寫入學生本地已讀）
+  const handleOpenSchoolAnnouncements = async (): Promise<void> => {
+    setShowSchoolModal(true);
+
+    if (hasUnread) {
+      setHasUnread(false);
+      const latestId = schoolAnnouncements[0]?.id;
+      if (latestId) {
+        await AsyncStorage.setItem(STUDENT_LAST_READ_KEY, latestId);
+      }
+    }
+  };
+
   const handleLogout = (): void => {
     signOut();
   };
@@ -63,23 +134,43 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="登出"
-            onPress={handleLogout}
-            style={({ pressed }) => [
-              styles.logoutButton,
-              pressed && styles.logoutButtonPressed,
-            ]}
-          >
-            <Text style={styles.logoutText}>登出</Text>
-          </Pressable>
+          {/* 右上方控制區：白色鈴鐺 + 登出按鈕 */}
+          <View style={styles.headerRight}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="校級公告"
+              onPress={handleOpenSchoolAnnouncements}
+              style={({ pressed }) => [
+                styles.bellButton,
+                pressed && styles.buttonPressed,
+              ]}
+            >
+              <Ionicons
+                name="notifications-outline"
+                size={20}
+                color="#FFFFFF"
+              />
+              {/* 有新公告時才顯示未讀紅點 */}
+              {hasUnread && <View style={styles.unreadDot} />}
+            </Pressable>
+
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="登出"
+              onPress={handleLogout}
+              style={({ pressed }) => [
+                styles.logoutButton,
+                pressed && styles.buttonPressed,
+              ]}
+            >
+              <Text style={styles.logoutText}>登出</Text>
+            </Pressable>
+          </View>
         </View>
 
         {/* 頁面介紹 */}
         <View style={styles.intro}>
           <Text style={styles.introTitle}>今天想去哪裡？</Text>
-
           <Text style={styles.introCopy}>選一顆泡泡，進入你的專屬空間</Text>
         </View>
 
@@ -99,6 +190,57 @@ export default function HomeScreen() {
           每一次選擇，都讓你的校園生活更有方向
         </Text>
       </SafeAreaView>
+
+      {/* 校級公告獨立彈窗 (Modal) */}
+      <Modal visible={showSchoolModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <View style={styles.modalIconWrap}>
+                  <Ionicons
+                    name="megaphone-outline"
+                    size={18}
+                    color="#FFFFFF"
+                  />
+                </View>
+                <View>
+                  <Text style={styles.modalTitle}>校級公告</Text>
+                  <Text style={styles.modalSubtitle}>由學校發布之全校通知</Text>
+                </View>
+              </View>
+
+              <Pressable onPress={() => setShowSchoolModal(false)} hitSlop={10}>
+                <Ionicons name="close" size={24} color="#F0FFF9" />
+              </Pressable>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              style={{ flex: 1 }}
+            >
+              {schoolAnnouncements.map((item) => (
+                <LinearGradient
+                  key={item.id}
+                  colors={["rgba(239,255,249,0.22)", "rgba(172,224,208,0.08)"]}
+                  style={styles.schoolCard}
+                >
+                  <View style={styles.cardTopRow}>
+                    <View style={styles.schoolTag}>
+                      <Text style={styles.schoolTagText}>全校公告</Text>
+                    </View>
+                    <Text style={styles.metaTimeText}>{item.publishedAt}</Text>
+                  </View>
+                  <Text style={styles.announcementTitle}>{item.title}</Text>
+                  <Text style={styles.announcementContent}>{item.content}</Text>
+                </LinearGradient>
+              ))}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -129,13 +271,9 @@ function BubbleButton({ bubble, onPress }: BubbleButtonProps) {
         locations={[0, 0.55, 1]}
         style={styles.bubbleGradient}
       >
-        {/* 泡泡高光 */}
         <View style={styles.bubbleShine} />
-
-        {/* 泡泡內部裝飾 */}
         <View style={styles.bubbleGlow} />
 
-        {/* 文字 */}
         <Text
           style={[
             styles.bubbleLabel,
@@ -155,10 +293,8 @@ function getBubblePositionStyle(position: BubblePosition) {
   switch (position) {
     case "right":
       return styles.bubbleRight;
-
     case "left":
       return styles.bubbleLeft;
-
     case "center":
       return styles.bubbleCenter;
   }
@@ -169,21 +305,14 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#16445A",
   },
-
   safeArea: {
     flex: 1,
     paddingHorizontal: 24,
   },
-
-  /* =========================
-     背景光暈
-     ========================= */
-
   glow: {
     position: "absolute",
     borderRadius: 999,
   },
-
   glowTop: {
     width: 280,
     height: 280,
@@ -192,7 +321,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#F28C8C",
     opacity: 0.42,
   },
-
   glowBottom: {
     width: 320,
     height: 320,
@@ -201,32 +329,49 @@ const styles = StyleSheet.create({
     backgroundColor: "#F2C14E",
     opacity: 0.32,
   },
-
-  /* =========================
-     頁首
-     ========================= */
-
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingTop: 22,
   },
-
   eyebrow: {
     color: "#8FB8AE",
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 1.6,
   },
-
   headerTitle: {
     color: "#F0FFF9",
     fontSize: 18,
     fontWeight: "700",
     marginTop: 5,
   },
-
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  bellButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: "rgba(255,255,255,0.09)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.35)",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  unreadDot: {
+    position: "absolute",
+    top: 7,
+    right: 8,
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: "#F28C8C",
+  },
   logoutButton: {
     minWidth: 58,
     alignItems: "center",
@@ -238,146 +383,90 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(255,255,255,0.18)",
   },
-
-  logoutButtonPressed: {
+  buttonPressed: {
     opacity: 0.65,
-    transform: [{ scale: 0.96 }],
+    transform: [{ scale: 0.95 }],
   },
-
   logoutText: {
     color: "#F0FFF9",
     fontSize: 12,
     fontWeight: "700",
   },
-
-  /* =========================
-     介紹文字
-     ========================= */
-
   intro: {
     alignItems: "center",
     marginTop: 48,
   },
-
   introTitle: {
     color: "#F1FFF9",
     fontSize: 26,
     fontWeight: "700",
     letterSpacing: 0.3,
   },
-
   introCopy: {
     color: "#9EC3B8",
     fontSize: 13,
     marginTop: 9,
   },
-
-  /* =========================
-     泡泡區域
-     ========================= */
-
   bubbleField: {
     flex: 1,
     minHeight: 460,
     justifyContent: "space-evenly",
     paddingVertical: 18,
   },
-
   bubble: {
     width: 154,
     height: 154,
     borderRadius: 100,
-
     shadowColor: "#020D0D",
-    shadowOffset: {
-      width: 6,
-      height: 9,
-    },
+    shadowOffset: { width: 6, height: 9 },
     shadowOpacity: 0.3,
     shadowRadius: 16,
-
     elevation: 10,
   },
-
   bubblePressed: {
-    transform: [
-      {
-        scale: 0.94,
-      },
-    ],
+    transform: [{ scale: 0.94 }],
     opacity: 0.9,
   },
-
   bubbleRight: {
     alignSelf: "flex-end",
     marginRight: 4,
   },
-
   bubbleLeft: {
     alignSelf: "flex-start",
     marginLeft: 0,
   },
-
   bubbleCenter: {
     alignSelf: "center",
     marginLeft: 28,
   },
-
   bubbleGradient: {
     flex: 1,
     borderRadius: 100,
-
     alignItems: "center",
     justifyContent: "center",
-
     borderWidth: 1.5,
     borderColor: "rgba(224,255,245,0.72)",
-
     overflow: "hidden",
   },
-
-  /* =========================
-     泡泡高光
-     ========================= */
-
   bubbleShine: {
     position: "absolute",
-
     width: 105,
     height: 43,
-
     top: 10,
     left: 23,
-
     borderRadius: 100,
-
     backgroundColor: "rgba(255,255,255,0.30)",
-
-    transform: [
-      {
-        rotate: "-25deg",
-      },
-    ],
+    transform: [{ rotate: "-25deg" }],
   },
-
   bubbleGlow: {
     position: "absolute",
-
     width: 75,
     height: 75,
-
     right: -20,
     bottom: -18,
-
     borderRadius: 999,
-
     backgroundColor: "rgba(255,255,255,0.08)",
   },
-
-  /* =========================
-     泡泡文字
-     ========================= */
-
   bubbleLabel: {
     color: "#173F3B",
     fontSize: 20,
@@ -386,13 +475,11 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 18,
   },
-
   bubbleLabelLong: {
     fontSize: 16,
     lineHeight: 22,
     paddingHorizontal: 17,
   },
-
   bubbleSubtitle: {
     color: "#8dbaed",
     fontSize: 10.5,
@@ -401,15 +488,85 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 12,
   },
-
-  /* =========================
-     底部文字
-     ========================= */
-
   footerNote: {
     textAlign: "center",
     color: "#86AAA1",
     fontSize: 11,
     paddingBottom: 17,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.65)",
+  },
+  modalContent: {
+    height: "75%",
+    backgroundColor: "#123A4E",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 20,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 16,
+  },
+  modalIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalTitle: {
+    color: "#F0FFF9",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  modalSubtitle: {
+    color: "#9AD8ED",
+    fontSize: 11,
+    marginTop: 2,
+  },
+  schoolCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(236,255,248,0.22)",
+    padding: 15,
+    marginBottom: 12,
+  },
+  cardTopRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  schoolTag: {
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  schoolTagText: {
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  metaTimeText: {
+    color: "#A9CEC3",
+    fontSize: 11,
+  },
+  announcementTitle: {
+    color: "#F0FFF9",
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 6,
+  },
+  announcementContent: {
+    color: "#DDEFE7",
+    fontSize: 13,
+    lineHeight: 19,
   },
 });

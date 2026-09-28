@@ -328,3 +328,24 @@ def delete_announcement(announcement_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# 取得全校校級公告（供鈴鐺按鈕讀取與比對紅點）
+@app.get("/api/announcements/school")
+def get_school_announcements():
+    try:
+        col = db["NOTIFY"]
+        # 篩選條件：course_id 為 None 或 類型為校級公告
+        query = {"$or": [{"course_id": None}, {"type": "校級公告"}]}
+        docs = list(col.find(query).sort("_id", -1).limit(10))
+
+        results = []
+        for doc in docs:
+            results.append({
+                "id": str(doc["_id"]),
+                "title": doc.get("title", "校級公告"),
+                "content": doc.get("content", ""),
+                "publishedAt": str(doc.get("published_at") or doc.get("update_time") or "最新")
+            })
+
+        return {"success": True, "data": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
