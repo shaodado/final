@@ -1,12 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type Student = {
@@ -74,9 +68,7 @@ function StudentRow({ student }: StudentRowProps) {
         {student.studentId}
       </Text>
 
-      <Text style={[styles.studentCell, styles.nameCell]}>
-        {student.name}
-      </Text>
+      <Text style={[styles.studentCell, styles.nameCell]}>{student.name}</Text>
 
       <Text style={[styles.studentCell, styles.classCell]}>
         {student.className}
@@ -88,14 +80,24 @@ function StudentRow({ student }: StudentRowProps) {
 export default function TeacherCourseDetailScreen() {
   const router = useRouter();
 
+  // 1. 接收上一頁傳過來的課程 ID 與課程名稱
   const params = useLocalSearchParams<{
+    courseId?: string;
     courseName?: string;
   }>();
 
+  const courseId = params.courseId ? Number(params.courseId) : 101;
   const courseName = params.courseName || "資訊管理";
 
+  // 2. 點擊「發布課程公告」時，把這門課的 ID 與名稱傳給公告頁面
   const handlePublishAnnouncement = (): void => {
-    router.push("/teacher-announcements" as never);
+    router.push({
+      pathname: "/teacher-announcements",
+      params: {
+        courseId: String(courseId),
+        courseName,
+      },
+    } as never);
   };
 
   const handleAssignTA = (): void => {
@@ -130,13 +132,9 @@ export default function TeacherCourseDetailScreen() {
         >
           {/* 課程名稱 */}
           <View style={styles.courseHeader}>
-            <Text style={styles.courseTitle}>
-              {courseName}
-            </Text>
+            <Text style={styles.courseTitle}>{courseName}</Text>
 
-            <Text style={styles.courseDescription}>
-              教師課程管理
-            </Text>
+            <Text style={styles.courseDescription}>教師課程管理</Text>
           </View>
 
           {/* 功能按鈕 */}
@@ -147,9 +145,7 @@ export default function TeacherCourseDetailScreen() {
               accessibilityLabel="發布課程公告"
               onPress={handlePublishAnnouncement}
             >
-              <Text style={styles.actionText}>
-                發布課程公告
-              </Text>
+              <Text style={styles.actionText}>發布課程公告</Text>
             </Pressable>
 
             <Pressable
@@ -158,48 +154,32 @@ export default function TeacherCourseDetailScreen() {
               accessibilityLabel="指派助教"
               onPress={handleAssignTA}
             >
-              <Text style={styles.actionText}>
-                指派助教
-              </Text>
+              <Text style={styles.actionText}>指派助教</Text>
             </Pressable>
           </View>
 
           {/* 學生人數 */}
           <LinearGradient
-            colors={[
-              "rgba(239,255,249,0.28)",
-              "rgba(172,224,208,0.1)",
-            ]}
+            colors={["rgba(239,255,249,0.28)", "rgba(172,224,208,0.1)"]}
             style={styles.card}
           >
-            <Text style={styles.sectionLabel}>
-              學生人數
-            </Text>
+            <Text style={styles.sectionLabel}>學生人數</Text>
 
             <View style={styles.countContainer}>
-              <Text style={styles.studentCount}>
-                {students.length}
-              </Text>
+              <Text style={styles.studentCount}>{students.length}</Text>
 
-              <Text style={styles.countUnit}>
-                人
-              </Text>
+              <Text style={styles.countUnit}>人</Text>
             </View>
           </LinearGradient>
 
           {/* 學生名單 */}
           <LinearGradient
-            colors={[
-              "rgba(239,255,249,0.28)",
-              "rgba(172,224,208,0.1)",
-            ]}
+            colors={["rgba(239,255,249,0.28)", "rgba(172,224,208,0.1)"]}
             style={styles.card}
           >
             <View style={styles.listHeader}>
               <View>
-                <Text style={styles.sectionLabel}>
-                  學生名單
-                </Text>
+                <Text style={styles.sectionLabel}>學生名單</Text>
 
                 <Text style={styles.listDescription}>
                   共 {students.length} 位學生
@@ -209,40 +189,22 @@ export default function TeacherCourseDetailScreen() {
 
             {/* 表格標題 */}
             <View style={styles.tableHeader}>
-              <Text
-                style={[
-                  styles.tableHeaderText,
-                  styles.studentIdCell,
-                ]}
-              >
+              <Text style={[styles.tableHeaderText, styles.studentIdCell]}>
                 學號
               </Text>
 
-              <Text
-                style={[
-                  styles.tableHeaderText,
-                  styles.nameCell,
-                ]}
-              >
+              <Text style={[styles.tableHeaderText, styles.nameCell]}>
                 姓名
               </Text>
 
-              <Text
-                style={[
-                  styles.tableHeaderText,
-                  styles.classCell,
-                ]}
-              >
+              <Text style={[styles.tableHeaderText, styles.classCell]}>
                 班級
               </Text>
             </View>
 
             {/* 學生資料 */}
             {students.map((student) => (
-              <StudentRow
-                key={student.studentId}
-                student={student}
-              />
+              <StudentRow key={student.studentId} student={student} />
             ))}
           </LinearGradient>
         </ScrollView>

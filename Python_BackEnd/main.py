@@ -103,21 +103,17 @@ def login(req: LoginRequest):
 # -------------------------------------------------------------
 # 2. 動態聯絡簿模組 (Feed) - 正式單一版本
 # -------------------------------------------------------------
+# 2. 學生端：動態聯絡簿（嚴格限縮：只有修該門課的學生才能收到）
 @app.get("/api/student/feed")
 def get_student_feed(user_id: int):
     try:
-        # 1. 查詢該學生已修或修習中的課程代號
+        # 查詢該學生已修習/正在修習的課程代碼 (如 [101])
         records = list(db["STUDENT_ACADEMIC_RECORD"].find({"user_id": user_id}))
         my_course_ids = [r["course_id"] for r in records if "course_id" in r]
 
         col = db["NOTIFY"]
-        # 2. 篩選：學生有修的課 (如 101) 或 全校通知 (course_id 為 None)
-        query = {
-            "$or": [
-                {"course_id": {"$in": my_course_ids}},
-                {"course_id": None}
-            ]
-        } if my_course_ids else {}
+        # 嚴格篩選：只有 course_id 在學生修課清單內的公告才會被撈出
+        query = {"course_id": {"$in": my_course_ids}} if my_course_ids else {"course_id": -999}
 
         docs = list(col.find(query).sort("_id", -1).limit(10))
 
@@ -133,8 +129,8 @@ def get_student_feed(user_id: int):
             feeds.append({
                 "id": str(doc["_id"]),
                 "icon": icon,
-                "title": doc.get("title") or "課堂公告",  # 👈 正確輸出標題
-                "content": doc.get("content", ""),      # 👈 正確輸出內文
+                "title": doc.get("title") or "課堂公告",
+                "content": doc.get("content", ""),
                 "time": str(doc.get("published_at") or doc.get("update_time") or "最新"),
                 "course_id": doc.get("course_id")
             })
@@ -290,12 +286,22 @@ def create_announcement(data: AnnouncementCreate):
         raise HTTPException(status_code=500, detail=str(e))
 
     # 2. 老師端：讀取歷史公告清單
+# 1. 老師端：讀取指定課程的歷史公告清單
 @app.get("/api/teacher/announcements")
-def get_teacher_announcements(teacher_id: int = 1001):
+def get_teacher_announcements(
+    teacher_id: int = 1001,
+    course_id: Optional[int] = None
+):
     try:
         col = db["NOTIFY"]
-        # 撈出該老師發布或指定課程的公告，依最新時間排序
-        docs = list(col.find({"$or": [{"teacher_id": teacher_id}, {"course_id": 101}]}).sort("_id", -1))
+        query = {}
+        # 若有指定課程，精準只撈該課程的公告；若無才依老師 ID 撈取
+        if course_id is not None:
+            query["course_id"] = course_id
+        elif teacher_id is not None:
+            query["teacher_id"] = teacher_id
+
+        docs = list(col.find(query).sort("_id", -1))
         announcements = []
         for d in docs:
             announcements.append({

@@ -1,12 +1,6 @@
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 type Course = {
@@ -19,29 +13,29 @@ type Course = {
 
 const courses: Course[] = [
   {
-    id: "1",
-    name: "資料庫系統",
+    id: "101",
+    name: "資料庫管理",
     code: "IM203",
     className: "資管三乙",
     students: 48,
   },
   {
-    id: "2",
-    name: "系統分析與設計",
+    id: "102",
+    name: "使用者經驗設計",
     code: "IM305",
     className: "資管三甲",
     students: 52,
   },
   {
-    id: "3",
-    name: "專案管理",
+    id: "103",
+    name: "互動媒體程式設計",
     code: "IM401",
     className: "資管四乙",
     students: 45,
   },
   {
-    id: "4",
-    name: "管理資訊系統",
+    id: "104",
+    name: "數位行銷實務",
     code: "IM302",
     className: "資管三乙",
     students: 50,
@@ -111,14 +105,10 @@ export default function TeacherCoursesScreen() {
             <View style={styles.badge}>
               <View style={styles.onlineDot} />
 
-              <Text style={styles.badgeText}>
-                COURSE MANAGEMENT
-              </Text>
+              <Text style={styles.badgeText}>COURSE MANAGEMENT</Text>
             </View>
 
-            <Text style={styles.introductionTitle}>
-              選擇要管理的課程
-            </Text>
+            <Text style={styles.introductionTitle}>選擇要管理的課程</Text>
 
             <Text style={styles.introductionDescription}>
               查看課程資訊、管理學生與發布課程公告
@@ -130,20 +120,13 @@ export default function TeacherCoursesScreen() {
              ========================= */}
           <View style={styles.summaryCard}>
             <LinearGradient
-              colors={[
-                "rgba(250,255,253,0.12)",
-                "rgba(178,225,212,0.06)",
-              ]}
+              colors={["rgba(250,255,253,0.12)", "rgba(178,225,212,0.06)"]}
               style={styles.summaryGradient}
             >
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryNumber}>
-                  {courses.length}
-                </Text>
+                <Text style={styles.summaryNumber}>{courses.length}</Text>
 
-                <Text style={styles.summaryLabel}>
-                  授課課程
-                </Text>
+                <Text style={styles.summaryLabel}>授課課程</Text>
               </View>
 
               <View style={styles.summaryDivider} />
@@ -156,9 +139,7 @@ export default function TeacherCoursesScreen() {
                   )}
                 </Text>
 
-                <Text style={styles.summaryLabel}>
-                  修課學生
-                </Text>
+                <Text style={styles.summaryLabel}>修課學生</Text>
               </View>
             </LinearGradient>
           </View>
@@ -168,13 +149,9 @@ export default function TeacherCoursesScreen() {
              ========================= */}
           <View style={styles.courseSection}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>
-                我的課程
-              </Text>
+              <Text style={styles.sectionTitle}>我的課程</Text>
 
-              <Text style={styles.sectionCount}>
-                {courses.length} COURSES
-              </Text>
+              <Text style={styles.sectionCount}>{courses.length} COURSES</Text>
             </View>
 
             <View style={styles.courseList}>
@@ -206,13 +183,9 @@ export default function TeacherCoursesScreen() {
 
                     {/* 課程資訊 */}
                     <View style={styles.courseInfo}>
-                      <Text style={styles.courseCode}>
-                        {course.code}
-                      </Text>
+                      <Text style={styles.courseCode}>{course.code}</Text>
 
-                      <Text style={styles.courseName}>
-                        {course.name}
-                      </Text>
+                      <Text style={styles.courseName}>{course.name}</Text>
 
                       <View style={styles.courseMeta}>
                         <Text style={styles.courseMetaText}>
@@ -229,9 +202,7 @@ export default function TeacherCoursesScreen() {
 
                     {/* 右側箭頭 */}
                     <View style={styles.arrowArea}>
-                      <Text style={styles.arrow}>
-                        ›
-                      </Text>
+                      <Text style={styles.arrow}>›</Text>
                     </View>
                   </LinearGradient>
                 </Pressable>
@@ -245,9 +216,7 @@ export default function TeacherCoursesScreen() {
           <View style={styles.footer}>
             <View style={styles.footerLine} />
 
-            <Text style={styles.footerText}>
-              SELECT A COURSE TO CONTINUE
-            </Text>
+            <Text style={styles.footerText}>SELECT A COURSE TO CONTINUE</Text>
           </View>
         </ScrollView>
       </SafeAreaView>
