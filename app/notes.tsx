@@ -164,54 +164,102 @@ export default function NotesScreen() {
 
           <Text style={styles.sectionTitle}>管理工具</Text>
           <View style={styles.actions}>
-            <Action
-              title="查看動態聯絡簿"
-              detail="掌握最新課堂公告與異動"
-              icon="chatbubbles-outline"
-              color="#9AD8ED"
-              onPress={() => {
-                setPanel("feed");
-                fetchStudentFeed();
-              }}
-            />
-            <Action
-              title="標記作業完成狀態"
-              detail={`${completed.length} / ${defaultAssignments.length} 項作業已完成`}
-              icon="checkbox-outline"
-              color="#B6E3C2"
-              onPress={() => setPanel("assignments")}
-            />
-            <Action
-              title="匯出個人課業時程"
-              detail="查看並分享今天的課表"
-              icon="calendar-outline"
-              color="#F2C14E"
-              onPress={() => setPanel("schedule")}
-            />
-            <Action
-              title="自訂提醒規則"
-              detail={
-                smartReminder ? "智慧催繳提醒已開啟" : "依截止時間安排提醒"
-              }
-              icon="notifications-outline"
-              color="#EAB0D3"
-              active={smartReminder}
-              onPress={() => setPanel("reminder")}
-            />
+            <View>
+              <Action
+                title="查看動態聯絡簿"
+                detail="掌握最新課堂公告與異動"
+                icon="chatbubbles-outline"
+                color="#9AD8ED"
+                expanded={panel === "feed"}
+                onPress={() => {
+                  if (panel === "feed") { setPanel(null); return; }
+                  setPanel("feed");
+                  fetchStudentFeed();
+                }}
+              />
+              {panel === "feed" && (
+                <PanelView
+                  panel={panel}
+                  close={() => setPanel(null)}
+                  completed={completed}
+                  toggleAssignment={toggleAssignment}
+                  smartReminder={smartReminder}
+                  setSmartReminder={setSmartReminder}
+                  feedList={feedList}
+                  loadingFeed={loadingFeed}
+                />
+              )}
+            </View>
+            <View>
+              <Action
+                title="標記作業完成狀態"
+                detail={`${completed.length} / ${defaultAssignments.length} 項作業已完成`}
+                icon="checkbox-outline"
+                color="#B6E3C2"
+                expanded={panel === "assignments"}
+                onPress={() => setPanel(panel === "assignments" ? null : "assignments")}
+              />
+              {panel === "assignments" && (
+                <PanelView
+                  panel={panel}
+                  close={() => setPanel(null)}
+                  completed={completed}
+                  toggleAssignment={toggleAssignment}
+                  smartReminder={smartReminder}
+                  setSmartReminder={setSmartReminder}
+                  feedList={feedList}
+                  loadingFeed={loadingFeed}
+                />
+              )}
+            </View>
+            <View>
+              <Action
+                title="匯出個人課業時程"
+                detail="查看並分享今天的課表"
+                icon="calendar-outline"
+                color="#F2C14E"
+                expanded={panel === "schedule"}
+                onPress={() => setPanel(panel === "schedule" ? null : "schedule")}
+              />
+              {panel === "schedule" && (
+                <PanelView
+                  panel={panel}
+                  close={() => setPanel(null)}
+                  completed={completed}
+                  toggleAssignment={toggleAssignment}
+                  smartReminder={smartReminder}
+                  setSmartReminder={setSmartReminder}
+                  feedList={feedList}
+                  loadingFeed={loadingFeed}
+                />
+              )}
+            </View>
+            <View>
+              <Action
+                title="自訂提醒規則"
+                detail={
+                  smartReminder ? "智慧催繳提醒已開啟" : "依截止時間安排提醒"
+                }
+                icon="notifications-outline"
+                color="#EAB0D3"
+                active={smartReminder}
+                expanded={panel === "reminder"}
+                onPress={() => setPanel(panel === "reminder" ? null : "reminder")}
+              />
+              {panel === "reminder" && (
+                <PanelView
+                  panel={panel}
+                  close={() => setPanel(null)}
+                  completed={completed}
+                  toggleAssignment={toggleAssignment}
+                  smartReminder={smartReminder}
+                  setSmartReminder={setSmartReminder}
+                  feedList={feedList}
+                  loadingFeed={loadingFeed}
+                />
+              )}
+            </View>
           </View>
-
-          {panel && (
-            <PanelView
-              panel={panel}
-              close={() => setPanel(null)}
-              completed={completed}
-              toggleAssignment={toggleAssignment}
-              smartReminder={smartReminder}
-              setSmartReminder={setSmartReminder}
-              feedList={feedList}
-              loadingFeed={loadingFeed}
-            />
-          )}
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -224,6 +272,7 @@ function Action({
   icon,
   color,
   active,
+  expanded,
   onPress,
 }: {
   title: string;
@@ -231,6 +280,7 @@ function Action({
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
   active?: boolean;
+  expanded?: boolean;
   onPress: () => void;
 }) {
   return (
@@ -256,9 +306,9 @@ function Action({
           <Text style={styles.actionDetail}>{detail}</Text>
         </View>
         <Ionicons
-          name={active ? "checkmark-circle" : "chevron-forward"}
+          name={expanded ? "chevron-down" : active ? "checkmark-circle" : "chevron-forward"}
           size={21}
-          color={active ? color : "#8EB5AA"}
+          color={expanded || active ? color : "#8EB5AA"}
         />
       </LinearGradient>
     </Pressable>
@@ -297,9 +347,6 @@ function PanelView({
     <View style={styles.panel}>
       <View style={styles.panelHead}>
         <Text style={styles.panelTitle}>{title}</Text>
-        <Pressable onPress={close} accessibilityLabel="關閉">
-          <Ionicons name="close" size={22} color="#D7F0E8" />
-        </Pressable>
       </View>
 
       {panel === "feed" && (
@@ -504,7 +551,7 @@ const styles = StyleSheet.create({
   actionTitle: { color: "#F0FFF9", fontSize: 15, fontWeight: "800" },
   actionDetail: { color: "#A9CEC3", fontSize: 12, marginTop: 4 },
   panel: {
-    marginTop: 28,
+    marginTop: 8,
     padding: 18,
     borderRadius: 22,
     backgroundColor: "rgba(11,49,63,0.75)",

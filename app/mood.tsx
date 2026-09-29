@@ -223,6 +223,10 @@ export default function MoodScreen() {
   };
 
   const openPanel = (nextPanel: Panel): void => {
+    if (panel === nextPanel) {
+      setPanel(null);
+      return;
+    }
     setPanel(nextPanel);
 
     if (nextPanel === "rate") {
@@ -349,52 +353,21 @@ export default function MoodScreen() {
                 <Text style={styles.sectionTitle}>選課工具</Text>
 
                 <View style={styles.actionList}>
-                  <Action
-                    title="給予課程評價"
-                    detail="僅限為已修課程分享真實感受"
-                    icon="star-outline"
-                    color="#F2C14E"
-                    onPress={() => openPanel("rate")}
-                  />
-                  <Action
-                    title="進行趣味心理測驗"
-                    detail="完成測驗，取得適配課程推薦"
-                    icon="sparkles-outline"
-                    color="#F28C8C"
-                    onPress={() => openPanel("quiz")}
-                  />
-                  <Action
-                    title="查看結構化課程評價"
-                    detail="依系所、年級、必選修精準搜尋"
-                    icon="bar-chart-outline"
-                    color="#9AD8ED"
-                    onPress={() => openPanel("reviews")}
-                  />
-                  <Action
-                    title="查看課程詳細資訊"
-                    detail="了解教師、時間與課程內容"
-                    icon="information-circle-outline"
-                    color="#B6E3C2"
-                    onPress={() => openPanel("details")}
-                  />
-                  <Action
-                    title="接收選課時程提醒"
-                    detail={reminderOn ? "提醒已開啟" : "重要日期不再錯過"}
-                    icon="notifications-outline"
-                    color="#EAB0D3"
-                    active={reminderOn}
-                    onPress={() => openPanel("reminder")}
-                  />
-                </View>
-
-                {/* 1. 給予課程評價面板 */}
+                  <View>
+                    <Action
+                      title="給予課程評價"
+                      detail="僅限為已修課程分享真實感受"
+                      icon="star-outline"
+                      color="#F2C14E"
+                      expanded={panel === "rate"}
+                      onPress={() => openPanel("rate")}
+                    />
+                    {/* 1. 給予課程評價面板 */}
                 {panel === "rate" && (
                   <View style={styles.panel}>
                     <View style={styles.panelHeader}>
                       <Text style={styles.panelTitle}>給予課程評價</Text>
-                      <Pressable onPress={() => setPanel(null)}>
-                        <Ionicons name="close" size={22} color="#D7F0E8" />
-                      </Pressable>
+                      
                     </View>
 
                     <Text style={styles.inputLabel}>選擇要評價的已修課程</Text>
@@ -460,14 +433,93 @@ export default function MoodScreen() {
                   </View>
                 )}
 
-                {/* 2. 結構化課程評價面板 */}
+                
+                  </View>
+                  <View>
+                    <Action
+                      title="進行趣味心理測驗"
+                      detail="完成測驗，取得適配課程推薦"
+                      icon="sparkles-outline"
+                      color="#F28C8C"
+                      expanded={panel === "quiz"}
+                      onPress={() => openPanel("quiz")}
+                    />
+                    {/* 3. 心理測驗 */}
+                {panel === "quiz" && (
+                  <View style={styles.panel}>
+                    <View style={styles.panelHeader}>
+                      <Text style={styles.panelTitle}>趣味心理測驗</Text>
+                      
+                    </View>
+                    {isQuizFinished ? (
+                      <>
+                        <Text style={styles.recommendKicker}>你的測驗報告</Text>
+                        <Text style={styles.recommendTitle}>
+                          適合從「動手探索」開始
+                        </Text>
+                        <Text style={styles.panelCopy}>
+                          依你的回答，推薦你優先查看互動媒體程式設計與使用者經驗設計。
+                        </Text>
+                        <Pressable
+                          style={styles.secondaryButton}
+                          onPress={() => {
+                            setQuizStep(0);
+                            setQuizAnswers([]);
+                          }}
+                        >
+                          <Text style={styles.secondaryText}>重新測驗</Text>
+                        </Pressable>
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.progress}>
+                          第 {quizStep + 1} / {quizQuestions.length} 題
+                        </Text>
+                        <Text style={styles.question}>
+                          {quizQuestions[quizStep][0]}
+                        </Text>
+                        <Pressable
+                          style={styles.option}
+                          onPress={() =>
+                            handleAnswer(quizQuestions[quizStep][1])
+                          }
+                        >
+                          <Text style={styles.optionText}>
+                            {quizQuestions[quizStep][1]}
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.option}
+                          onPress={() =>
+                            handleAnswer(quizQuestions[quizStep][2])
+                          }
+                        >
+                          <Text style={styles.optionText}>
+                            {quizQuestions[quizStep][2]}
+                          </Text>
+                        </Pressable>
+                      </>
+                    )}
+                  </View>
+                )}
+
+                
+                  </View>
+                  <View>
+                    <Action
+                      title="查看結構化課程評價"
+                      detail="依系所、年級、必選修精準搜尋"
+                      icon="bar-chart-outline"
+                      color="#9AD8ED"
+                      expanded={panel === "reviews"}
+                      onPress={() => openPanel("reviews")}
+                    />
+                    {/* 2. 結構化課程評價面板 */}
                 {panel === "reviews" && (
                   <View style={styles.panel}>
                     <View style={styles.panelHeader}>
                       <Text style={styles.panelTitle}>結構化課程評價檢索</Text>
-                      <Pressable onPress={() => setPanel(null)}>
-                        <Ionicons name="close" size={22} color="#D7F0E8" />
-                      </Pressable>
+                      
                     </View>
 
                     <Text style={styles.filterTitle}>系所別</Text>
@@ -620,75 +672,23 @@ export default function MoodScreen() {
                   </View>
                 )}
 
-                {/* 3. 心理測驗 */}
-                {panel === "quiz" && (
-                  <View style={styles.panel}>
-                    <View style={styles.panelHeader}>
-                      <Text style={styles.panelTitle}>趣味心理測驗</Text>
-                      <Pressable onPress={() => setPanel(null)}>
-                        <Ionicons name="close" size={22} color="#D7F0E8" />
-                      </Pressable>
-                    </View>
-                    {isQuizFinished ? (
-                      <>
-                        <Text style={styles.recommendKicker}>你的測驗報告</Text>
-                        <Text style={styles.recommendTitle}>
-                          適合從「動手探索」開始
-                        </Text>
-                        <Text style={styles.panelCopy}>
-                          依你的回答，推薦你優先查看互動媒體程式設計與使用者經驗設計。
-                        </Text>
-                        <Pressable
-                          style={styles.secondaryButton}
-                          onPress={() => {
-                            setQuizStep(0);
-                            setQuizAnswers([]);
-                          }}
-                        >
-                          <Text style={styles.secondaryText}>重新測驗</Text>
-                        </Pressable>
-                      </>
-                    ) : (
-                      <>
-                        <Text style={styles.progress}>
-                          第 {quizStep + 1} / {quizQuestions.length} 題
-                        </Text>
-                        <Text style={styles.question}>
-                          {quizQuestions[quizStep][0]}
-                        </Text>
-                        <Pressable
-                          style={styles.option}
-                          onPress={() =>
-                            handleAnswer(quizQuestions[quizStep][1])
-                          }
-                        >
-                          <Text style={styles.optionText}>
-                            {quizQuestions[quizStep][1]}
-                          </Text>
-                        </Pressable>
-                        <Pressable
-                          style={styles.option}
-                          onPress={() =>
-                            handleAnswer(quizQuestions[quizStep][2])
-                          }
-                        >
-                          <Text style={styles.optionText}>
-                            {quizQuestions[quizStep][2]}
-                          </Text>
-                        </Pressable>
-                      </>
-                    )}
+                
                   </View>
-                )}
-
-                {/* 4. 課程詳細資訊 */}
+                  <View>
+                    <Action
+                      title="查看課程詳細資訊"
+                      detail="了解教師、時間與課程內容"
+                      icon="information-circle-outline"
+                      color="#B6E3C2"
+                      expanded={panel === "details"}
+                      onPress={() => openPanel("details")}
+                    />
+                    {/* 4. 課程詳細資訊 */}
                 {panel === "details" && (
                   <View style={styles.panel}>
                     <View style={styles.panelHeader}>
                       <Text style={styles.panelTitle}>課程詳細資訊</Text>
-                      <Pressable onPress={() => setPanel(null)}>
-                        <Ionicons name="close" size={22} color="#D7F0E8" />
-                      </Pressable>
+                      
                     </View>
                     <View style={{ gap: 10, marginTop: 14 }}>
                       {defaultCourses.map((c) => (
@@ -703,14 +703,24 @@ export default function MoodScreen() {
                   </View>
                 )}
 
-                {/* 5. 選課提醒 */}
+                
+                  </View>
+                  <View>
+                    <Action
+                      title="接收選課時程提醒"
+                      detail={reminderOn ? "提醒已開啟" : "重要日期不再錯過"}
+                      icon="notifications-outline"
+                      color="#EAB0D3"
+                      active={reminderOn}
+                      expanded={panel === "reminder"}
+                      onPress={() => openPanel("reminder")}
+                    />
+                    {/* 5. 選課提醒 */}
                 {panel === "reminder" && (
                   <View style={styles.panel}>
                     <View style={styles.panelHeader}>
                       <Text style={styles.panelTitle}>選課時程提醒</Text>
-                      <Pressable onPress={() => setPanel(null)}>
-                        <Ionicons name="close" size={22} color="#D7F0E8" />
-                      </Pressable>
+                      
                     </View>
                     <Text style={styles.panelCopy}>
                       開啟後，系統會在選課加退選與截止日前主動提醒你。
@@ -741,7 +751,11 @@ export default function MoodScreen() {
                     </Pressable>
                   </View>
                 )}
-              </View>
+              
+                  </View>
+                </View>
+
+                </View>
             </TouchableWithoutFeedback>
           </ScrollView>
         </KeyboardAvoidingView>
@@ -1057,6 +1071,7 @@ function Action({
   icon,
   color,
   active,
+  expanded,
   onPress,
 }: {
   title: string;
@@ -1064,6 +1079,7 @@ function Action({
   icon: keyof typeof Ionicons.glyphMap;
   color: string;
   active?: boolean;
+  expanded?: boolean;
   onPress: () => void;
 }) {
   return (
@@ -1085,9 +1101,9 @@ function Action({
           <Text style={styles.actionDetail}>{detail}</Text>
         </View>
         <Ionicons
-          name={active ? "checkmark-circle" : "chevron-forward"}
+          name={expanded ? "chevron-down" : active ? "checkmark-circle" : "chevron-forward"}
           size={21}
-          color={active ? color : "#8EB5AA"}
+          color={expanded || active ? color : "#8EB5AA"}
         />
       </LinearGradient>
     </Pressable>
@@ -1163,7 +1179,7 @@ const styles = StyleSheet.create({
   actionTitle: { color: "#F0FFF9", fontSize: 15, fontWeight: "800" },
   actionDetail: { color: "#A9CEC3", fontSize: 12, marginTop: 4 },
   panel: {
-    marginTop: 24,
+    marginTop: 8,
     padding: 18,
     borderRadius: 22,
     backgroundColor: "rgba(11,49,63,0.85)",
