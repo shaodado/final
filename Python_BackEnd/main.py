@@ -103,18 +103,35 @@ def login(req: LoginRequest):
 # -------------------------------------------------------------
 # 2. 動態聯絡簿模組 (Feed) - 正式單一版本
 # -------------------------------------------------------------
-# 2. 學生端：動態聯絡簿（嚴格限縮：只有修該門課的學生才能收到）
 @app.get("/api/student/feed")
-def get_student_feed(user_id: int):
+def get_student_feed(user_id: int = 3001):
     try:
-        # 查詢該學生已修習/正在修習的課程代碼 (如 [101])
+        # 1. 查詢該學生已修習/正在修習的課程代碼 (如 [101])
         records = list(db["STUDENT_ACADEMIC_RECORD"].find({"user_id": user_id}))
-        my_course_ids = [r["course_id"] for r in records if "course_id" in r]
+        raw_ids = [r["course_id"] for r in records if "course_id" in r]
 
+        # 兼顧 int 與 str 型別防呆 (例如 101 與 "101" 都能比對)
+        my_course_ids = []
+        for cid in raw_ids:
+            my_course_ids.append(cid)
+            try:
+                my_course_ids.append(int(cid))
+            except (ValueError, TypeError):
+                pass
+            my_course_ids.append(str(cid))
+        my_course_ids = list(set(my_course_ids))
+
+        # 2. 建立課程名稱對照表 (course_id -> course_name)
+        courses = list(db["COURSE"].find({}))
+        course_map = {}
+        for c in courses:
+            cid = str(c.get("id") or c.get("course_id"))
+            cname = c.get("course_name") or c.get("name") or "課堂公告"
+            course_map[cid] = cname
+
+        # 3. 嚴格篩選：只有 course_id 在學生修課清單內的公告才會被撈出
         col = db["NOTIFY"]
-        # 嚴格篩選：只有 course_id 在學生修課清單內的公告才會被撈出
         query = {"course_id": {"$in": my_course_ids}} if my_course_ids else {"course_id": -999}
-
         docs = list(col.find(query).sort("_id", -1).limit(10))
 
         feeds = []
@@ -126,13 +143,25 @@ def get_student_feed(user_id: int):
             }
             icon = icon_map.get(doc.get("type"), "megaphone-outline")
 
+            # 透過 course_id 查出真實課程名稱
+            raw_cid = doc.get("course_id")
+            cid_str = str(raw_cid) if raw_cid is not None else ""
+            cname = course_map.get(cid_str, f"課程 {cid_str}" if raw_cid else "全校公告")
+
+            # 主題前面加上【課程名稱】
+            raw_title = doc.get("title") or "課堂公告"
+            formatted_title = f"【{cname}】{raw_title}"
+
             feeds.append({
                 "id": str(doc["_id"]),
                 "icon": icon,
-                "title": doc.get("title") or "課堂公告",
+                "course_name": cname,
+                "course_id": raw_cid,
+                "title": formatted_title,  # 已在主題前加上【課程名稱】
+                "raw_title": raw_title,
                 "content": doc.get("content", ""),
                 "time": str(doc.get("published_at") or doc.get("update_time") or "最新"),
-                "course_id": doc.get("course_id")
+                "due_date": doc.get("due_date")
             })
 
         return {"success": True, "user_id": user_id, "data": feeds}

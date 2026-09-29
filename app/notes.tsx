@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -36,24 +37,63 @@ const defaultAgenda = [
   "15:10 社群媒體與文化",
 ];
 
+/* 預設 7 筆公告，方便即時驗證一頁 5 筆的翻頁效果 */
 const defaultFeeds = [
   {
     icon: "megaphone-outline",
     title: "期中提案延期",
-    content: "使用者經驗設計：期中提案繳交期限延至週五。",
+    content:
+      "使用者經驗設計：期中提案繳交期限延至週五，請同學於繳交前確認原型連結與權限設定完整。",
     time: "10 分鐘前",
+    course_name: "使用者經驗設計",
   },
   {
     icon: "calendar-outline",
     title: "上課方式異動",
-    content: "資料視覺化：下週課程改為線上同步授課。",
+    content:
+      "資料視覺化：因應校外專家演講，下週課程改為線上同步授課，會議連結已寄發至校園信箱。",
     time: "昨天",
+    course_name: "資料視覺化",
   },
   {
     icon: "document-text-outline",
     title: "課堂資料更新",
-    content: "數位文化研究：本週閱讀資料已上傳至教學平台。",
+    content:
+      "數位文化研究：本週閱讀補充資料已上傳至教學平台，請同學提早下載並準備課堂小組討論要點。",
     time: "週一",
+    course_name: "數位文化研究",
+  },
+  {
+    icon: "alert-circle-outline",
+    title: "分組名單確認",
+    content:
+      "互動媒體程式設計：期末專案分組名單已截止登記，請各組組長確認成員名冊與題目提案。",
+    time: "3 天前",
+    course_name: "互動媒體程式設計",
+  },
+  {
+    icon: "clipboard-outline",
+    title: "作業繳交格式規範",
+    content:
+      "社群媒體與文化：作業二請一律轉為 PDF 檔案上傳，檔名請依「學號_姓名_作業2」命名。",
+    time: "4 天前",
+    course_name: "社群媒體與文化",
+  },
+  {
+    icon: "time-outline",
+    title: "助教課輔諮詢時段調整",
+    content:
+      "使用者經驗設計：本週四助教 Office Hour 調整至 15:30~17:30，地點在系館 302 研討室。",
+    time: "上週",
+    course_name: "使用者經驗設計",
+  },
+  {
+    icon: "checkmark-done-outline",
+    title: "期中平時成績公佈",
+    content:
+      "資料視覺化：前半學期平時作業與出缺席分數已登錄於成績系統，請同學於週日前複查。",
+    time: "上週",
+    course_name: "資料視覺化",
   },
 ];
 
@@ -74,6 +114,31 @@ export default function NotesScreen() {
   // 動態聯絡簿公告狀態
   const [feedList, setFeedList] = useState<any[]>(defaultFeeds);
   const [loadingFeed, setLoadingFeed] = useState(false);
+
+  // 當前點選查看詳情的公告索引（null 代表關閉彈窗）
+  const [selectedFeedIndex, setSelectedFeedIndex] = useState<number | null>(
+    null
+  );
+
+  // Modal 彈窗內的前後公告判斷
+  const hasPrevFeed = selectedFeedIndex !== null && selectedFeedIndex > 0;
+  const hasNextFeed =
+    selectedFeedIndex !== null && selectedFeedIndex < feedList.length - 1;
+
+  const handlePrevFeed = () => {
+    if (hasPrevFeed && selectedFeedIndex !== null) {
+      setSelectedFeedIndex(selectedFeedIndex - 1);
+    }
+  };
+
+  const handleNextFeed = () => {
+    if (hasNextFeed && selectedFeedIndex !== null) {
+      setSelectedFeedIndex(selectedFeedIndex + 1);
+    }
+  };
+
+  const currentSelectedFeed =
+    selectedFeedIndex !== null ? feedList[selectedFeedIndex] : null;
 
   // 使用者手動點擊或重新整理時呼叫
   const fetchStudentFeed = async () => {
@@ -172,7 +237,10 @@ export default function NotesScreen() {
                 color="#9AD8ED"
                 expanded={panel === "feed"}
                 onPress={() => {
-                  if (panel === "feed") { setPanel(null); return; }
+                  if (panel === "feed") {
+                    setPanel(null);
+                    return;
+                  }
                   setPanel("feed");
                   fetchStudentFeed();
                 }}
@@ -187,6 +255,7 @@ export default function NotesScreen() {
                   setSmartReminder={setSmartReminder}
                   feedList={feedList}
                   loadingFeed={loadingFeed}
+                  onSelectFeedIndex={(idx) => setSelectedFeedIndex(idx)}
                 />
               )}
             </View>
@@ -197,7 +266,9 @@ export default function NotesScreen() {
                 icon="checkbox-outline"
                 color="#B6E3C2"
                 expanded={panel === "assignments"}
-                onPress={() => setPanel(panel === "assignments" ? null : "assignments")}
+                onPress={() =>
+                  setPanel(panel === "assignments" ? null : "assignments")
+                }
               />
               {panel === "assignments" && (
                 <PanelView
@@ -209,6 +280,7 @@ export default function NotesScreen() {
                   setSmartReminder={setSmartReminder}
                   feedList={feedList}
                   loadingFeed={loadingFeed}
+                  onSelectFeedIndex={(idx) => setSelectedFeedIndex(idx)}
                 />
               )}
             </View>
@@ -219,7 +291,9 @@ export default function NotesScreen() {
                 icon="calendar-outline"
                 color="#F2C14E"
                 expanded={panel === "schedule"}
-                onPress={() => setPanel(panel === "schedule" ? null : "schedule")}
+                onPress={() =>
+                  setPanel(panel === "schedule" ? null : "schedule")
+                }
               />
               {panel === "schedule" && (
                 <PanelView
@@ -231,6 +305,7 @@ export default function NotesScreen() {
                   setSmartReminder={setSmartReminder}
                   feedList={feedList}
                   loadingFeed={loadingFeed}
+                  onSelectFeedIndex={(idx) => setSelectedFeedIndex(idx)}
                 />
               )}
             </View>
@@ -244,7 +319,9 @@ export default function NotesScreen() {
                 color="#EAB0D3"
                 active={smartReminder}
                 expanded={panel === "reminder"}
-                onPress={() => setPanel(panel === "reminder" ? null : "reminder")}
+                onPress={() =>
+                  setPanel(panel === "reminder" ? null : "reminder")
+                }
               />
               {panel === "reminder" && (
                 <PanelView
@@ -256,12 +333,145 @@ export default function NotesScreen() {
                   setSmartReminder={setSmartReminder}
                   feedList={feedList}
                   loadingFeed={loadingFeed}
+                  onSelectFeedIndex={(idx) => setSelectedFeedIndex(idx)}
                 />
               )}
             </View>
           </View>
         </ScrollView>
       </SafeAreaView>
+
+      {/* 結構化公告詳情彈窗（具備上一頁／下一頁導航） */}
+      <Modal
+        visible={selectedFeedIndex !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSelectedFeedIndex(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* 彈窗頂部列 */}
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1, paddingRight: 10 }}>
+                <View style={styles.modalTagRow}>
+                  <View style={styles.detailTag}>
+                    <Text style={styles.detailTagText}>
+                      {currentSelectedFeed?.course_name ||
+                        currentSelectedFeed?.type ||
+                        "課堂公告"}
+                    </Text>
+                  </View>
+                  <Text style={styles.modalMetaDate}>
+                    {currentSelectedFeed?.time ||
+                      currentSelectedFeed?.publishedAt ||
+                      "最新通知"}
+                  </Text>
+                </View>
+                <Text style={styles.modalFullTitle}>
+                  {currentSelectedFeed?.title || "公告詳情"}
+                </Text>
+              </View>
+
+              <Pressable
+                onPress={() => setSelectedFeedIndex(null)}
+                hitSlop={12}
+                style={styles.modalCloseButton}
+              >
+                <Ionicons name="close" size={24} color="#F0FFF9" />
+              </Pressable>
+            </View>
+
+            {/* 內文滾動區域 */}
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.modalScrollBody}
+            >
+              <View style={styles.detailBox}>
+                <Text style={styles.detailLabel}>公告內容</Text>
+                <Text style={styles.modalFullContent}>
+                  {currentSelectedFeed?.content ||
+                    currentSelectedFeed?.text ||
+                    "無詳細內容"}
+                </Text>
+              </View>
+
+              {/* 截止期限資訊（若有） */}
+              {(currentSelectedFeed?.due_date ||
+                currentSelectedFeed?.expiresAt) && (
+                <View style={styles.deadlineCard}>
+                  <Ionicons name="time-outline" size={16} color="#F28C8C" />
+                  <Text style={styles.deadlineText}>
+                    截止期限：
+                    {currentSelectedFeed.due_date ||
+                      currentSelectedFeed.expiresAt}
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+
+            {/* 彈窗底部「上一頁 / 下一頁」分頁導航列 */}
+            <View style={styles.paginationFooter}>
+              <Pressable
+                disabled={!hasPrevFeed}
+                onPress={handlePrevFeed}
+                style={({ pressed }) => [
+                  styles.pageButton,
+                  !hasPrevFeed && styles.pageButtonDisabled,
+                  pressed && hasPrevFeed && styles.pageButtonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="上一則公告"
+              >
+                <Ionicons
+                  name="chevron-back"
+                  size={16}
+                  color={hasPrevFeed ? "#F0FFF9" : "rgba(240,255,249,0.3)"}
+                />
+                <Text
+                  style={[
+                    styles.pageButtonText,
+                    !hasPrevFeed && styles.pageButtonTextDisabled,
+                  ]}
+                >
+                  上一頁
+                </Text>
+              </Pressable>
+
+              <Text style={styles.pageIndicator}>
+                {selectedFeedIndex !== null
+                  ? `${selectedFeedIndex + 1} / ${feedList.length}`
+                  : ""}
+              </Text>
+
+              <Pressable
+                disabled={!hasNextFeed}
+                onPress={handleNextFeed}
+                style={({ pressed }) => [
+                  styles.pageButton,
+                  !hasNextFeed && styles.pageButtonDisabled,
+                  pressed && hasNextFeed && styles.pageButtonPressed,
+                ]}
+                accessibilityRole="button"
+                accessibilityLabel="下一則公告"
+              >
+                <Text
+                  style={[
+                    styles.pageButtonText,
+                    !hasNextFeed && styles.pageButtonTextDisabled,
+                  ]}
+                >
+                  下一頁
+                </Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color={hasNextFeed ? "#F0FFF9" : "rgba(240,255,249,0.3)"}
+                />
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -306,7 +516,13 @@ function Action({
           <Text style={styles.actionDetail}>{detail}</Text>
         </View>
         <Ionicons
-          name={expanded ? "chevron-down" : active ? "checkmark-circle" : "chevron-forward"}
+          name={
+            expanded
+              ? "chevron-down"
+              : active
+                ? "checkmark-circle"
+                : "chevron-forward"
+          }
           size={21}
           color={expanded || active ? color : "#8EB5AA"}
         />
@@ -317,13 +533,13 @@ function Action({
 
 function PanelView({
   panel,
-  close,
   completed,
   toggleAssignment,
   smartReminder,
   setSmartReminder,
   feedList,
   loadingFeed,
+  onSelectFeedIndex,
 }: {
   panel: Exclude<Panel, null>;
   close: () => void;
@@ -333,6 +549,7 @@ function PanelView({
   setSmartReminder: (value: boolean) => void;
   feedList: any[];
   loadingFeed: boolean;
+  onSelectFeedIndex: (idx: number) => void;
 }) {
   const title =
     panel === "feed"
@@ -342,6 +559,15 @@ function PanelView({
         : panel === "schedule"
           ? "個人課業時程"
           : "自訂提醒規則";
+
+  // 動態聯絡簿分頁設定：每頁固定 5 筆
+  const PAGE_SIZE = 5;
+  const [feedPage, setFeedPage] = useState<number>(1);
+  const totalPages = Math.ceil(feedList.length / PAGE_SIZE) || 1;
+
+  // 計算當前頁要渲染的子陣列與起始全域索引
+  const startIndex = (feedPage - 1) * PAGE_SIZE;
+  const displayedFeeds = feedList.slice(startIndex, startIndex + PAGE_SIZE);
 
   return (
     <View style={styles.panel}>
@@ -357,15 +583,89 @@ function PanelView({
               style={{ paddingVertical: 20 }}
             />
           ) : feedList.length > 0 ? (
-            feedList.map((item, idx) => (
-              <Feed
-                key={item.id || idx}
-                icon={item.icon || "megaphone-outline"}
-                title={item.title || "課堂公告"}
-                content={item.content || item.text || ""}
-                time={item.time || "最新通知"}
-              />
-            ))
+            <>
+              {displayedFeeds.map((item, idx) => {
+                // 將分頁內的局部索引換算為全域索引，確保 Modal 彈窗連動正確
+                const globalIndex = startIndex + idx;
+                return (
+                  <Feed
+                    key={item.id || globalIndex}
+                    icon={item.icon || "megaphone-outline"}
+                    title={item.title || "課堂公告"}
+                    content={item.content || item.text || ""}
+                    time={item.time || "最新通知"}
+                    onPress={() => onSelectFeedIndex(globalIndex)}
+                  />
+                );
+              })}
+
+              {/* 公告列表「上一頁 / 下一頁」分頁導航列 */}
+              <View style={styles.paginationFooter}>
+                <Pressable
+                  disabled={feedPage <= 1}
+                  onPress={() => setFeedPage((p) => Math.max(1, p - 1))}
+                  style={({ pressed }) => [
+                    styles.pageButton,
+                    feedPage <= 1 && styles.pageButtonDisabled,
+                    pressed && feedPage > 1 && styles.pageButtonPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="列表上一頁"
+                >
+                  <Ionicons
+                    name="chevron-back"
+                    size={16}
+                    color={feedPage > 1 ? "#F0FFF9" : "rgba(240,255,249,0.3)"}
+                  />
+                  <Text
+                    style={[
+                      styles.pageButtonText,
+                      feedPage <= 1 && styles.pageButtonTextDisabled,
+                    ]}
+                  >
+                    上一頁
+                  </Text>
+                </Pressable>
+
+                <Text style={styles.pageIndicator}>
+                  {feedPage} / {totalPages}
+                </Text>
+
+                <Pressable
+                  disabled={feedPage >= totalPages}
+                  onPress={() =>
+                    setFeedPage((p) => Math.min(totalPages, p + 1))
+                  }
+                  style={({ pressed }) => [
+                    styles.pageButton,
+                    feedPage >= totalPages && styles.pageButtonDisabled,
+                    pressed &&
+                      feedPage < totalPages &&
+                      styles.pageButtonPressed,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel="列表下一頁"
+                >
+                  <Text
+                    style={[
+                      styles.pageButtonText,
+                      feedPage >= totalPages && styles.pageButtonTextDisabled,
+                    ]}
+                  >
+                    下一頁
+                  </Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={16}
+                    color={
+                      feedPage < totalPages
+                        ? "#F0FFF9"
+                        : "rgba(240,255,249,0.3)"
+                    }
+                  />
+                </Pressable>
+              </View>
+            </>
           ) : (
             <Text style={styles.panelCopy}>目前沒有專屬的課堂異動公告。</Text>
           )}
@@ -459,23 +759,51 @@ function Feed({
   title,
   content,
   time,
+  onPress,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   content: string;
   time: string;
+  onPress: () => void;
 }) {
   return (
-    <View style={styles.feed}>
+    <Pressable
+      style={({ pressed }) => [styles.feed, pressed && styles.feedPressed]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={`查看公告：${title}`}
+    >
       <View style={styles.feedIcon}>
         <Ionicons name={icon} size={18} color="#9AD8ED" />
       </View>
       <View style={styles.itemCopy}>
-        <Text style={styles.feedTitleText}>{title}</Text>
-        {content ? <Text style={styles.feedContentText}>{content}</Text> : null}
+        {/* 主題單行截斷 */}
+        <Text
+          style={styles.feedTitleText}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {title}
+        </Text>
+        {/* 內文單行截斷 */}
+        {content ? (
+          <Text
+            style={styles.feedContentText}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {content}
+          </Text>
+        ) : null}
         <Text style={styles.itemMeta}>{time}</Text>
       </View>
-    </View>
+      <Ionicons
+        name="chevron-forward"
+        size={16}
+        color="rgba(142,181,170,0.6)"
+      />
+    </Pressable>
   );
 }
 
@@ -566,12 +894,20 @@ const styles = StyleSheet.create({
   panelTitle: { color: "#F0FFF9", fontSize: 18, fontWeight: "800" },
   panelCopy: { color: "#B8D8D0", fontSize: 13, lineHeight: 20, marginTop: 13 },
   itemList: { gap: 9, marginTop: 16 },
+
+  /* 動態聯絡簿卡片按鈕樣式 */
   feed: {
     flexDirection: "row",
     paddingVertical: 13,
+    paddingHorizontal: 8,
     borderBottomWidth: 1,
     borderColor: "rgba(236,255,248,0.14)",
-    alignItems: "flex-start",
+    alignItems: "center",
+    borderRadius: 12,
+  },
+  feedPressed: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    transform: [{ scale: 0.985 }],
   },
   feedIcon: {
     width: 34,
@@ -580,20 +916,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(154,216,237,0.14)",
-    marginTop: 2,
   },
-  itemCopy: { flex: 1, marginLeft: 12 },
+  itemCopy: { flex: 1, marginLeft: 12, marginRight: 8 },
   feedTitleText: {
     color: "#F0FFF9",
     fontSize: 15,
     fontWeight: "800",
-    marginBottom: 4,
+    marginBottom: 3,
   },
   feedContentText: {
     color: "#D7EFE7",
     fontSize: 13,
-    lineHeight: 19,
-    marginBottom: 4,
+    lineHeight: 18,
+    marginBottom: 3,
   },
   itemTitle: { color: "#F0FFF9", fontSize: 13, fontWeight: "700" },
   itemMeta: { color: "#A9CEC3", fontSize: 11 },
@@ -638,5 +973,142 @@ const styles = StyleSheet.create({
   reminderOn: {
     borderColor: "rgba(242,193,78,0.75)",
     backgroundColor: "rgba(242,193,78,0.13)",
+  },
+
+  /* 結構化詳情 Modal 樣式 */
+  modalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    backgroundColor: "rgba(0,0,0,0.68)",
+  },
+  modalContent: {
+    height: "72%",
+    backgroundColor: "#123A4E",
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingTop: 20,
+    paddingHorizontal: 22,
+    paddingBottom: 25,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(236,255,248,0.15)",
+    paddingBottom: 15,
+    marginBottom: 14,
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalTagRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 6,
+  },
+  detailTag: {
+    backgroundColor: "rgba(154,216,237,0.2)",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  detailTagText: {
+    color: "#9AD8ED",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  modalMetaDate: {
+    color: "#8FB8AE",
+    fontSize: 11,
+  },
+  modalFullTitle: {
+    color: "#F0FFF9",
+    fontSize: 18,
+    fontWeight: "800",
+    lineHeight: 24,
+  },
+  modalScrollBody: {
+    paddingVertical: 10,
+  },
+  detailBox: {
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderRadius: 14,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(236,255,248,0.12)",
+    marginBottom: 14,
+  },
+  detailLabel: {
+    color: "#8FB8AE",
+    fontSize: 11,
+    fontWeight: "700",
+    marginBottom: 8,
+    letterSpacing: 1,
+  },
+  modalFullContent: {
+    color: "#E2F5EE",
+    fontSize: 14.5,
+    lineHeight: 23,
+  },
+  deadlineCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(242,140,140,0.12)",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "rgba(242,140,140,0.25)",
+  },
+  deadlineText: {
+    color: "#F28C8C",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+
+  /* 底部上一頁/下一頁分頁導航列（適用於列表與彈窗） */
+  paginationFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(236,255,248,0.15)",
+    marginTop: 8,
+  },
+  pageButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(236,255,248,0.22)",
+  },
+  pageButtonDisabled: {
+    backgroundColor: "rgba(255,255,255,0.03)",
+    borderColor: "rgba(236,255,248,0.08)",
+  },
+  pageButtonPressed: {
+    opacity: 0.7,
+    transform: [{ scale: 0.96 }],
+  },
+  pageButtonText: {
+    color: "#F0FFF9",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  pageButtonTextDisabled: {
+    color: "rgba(240,255,249,0.3)",
+  },
+  pageIndicator: {
+    color: "#A9CEC3",
+    fontSize: 13,
+    fontWeight: "700",
   },
 });
