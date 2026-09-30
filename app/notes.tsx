@@ -882,9 +882,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
     padding: 18,
     borderRadius: 22,
-    backgroundColor: "rgba(11,49,63,0.75)",
+    backgroundColor: "rgba(239,255,249,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(236,255,248,0.3)",
+    borderColor: "rgba(236,255,248,0.35)",
   },
   panelHead: {
     flexDirection: "row",

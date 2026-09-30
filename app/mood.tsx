@@ -1164,7 +1164,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 14,
     borderWidth: 1,
-    borderColor: "rgba(236,255,248,0.3)",
+    borderColor: "rgba(236,255,248,0.35)",
     borderRadius: 20,
   },
   actionIcon: {
@@ -1182,9 +1182,9 @@ const styles = StyleSheet.create({
     marginTop: 8,
     padding: 18,
     borderRadius: 22,
-    backgroundColor: "rgba(11,49,63,0.85)",
+    backgroundColor: "rgba(239,255,249,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(236,255,248,0.3)",
+    borderColor: "rgba(236,255,248,0.35)",
   },
   panelHeader: {
     flexDirection: "row",
@@ -1205,9 +1205,9 @@ const styles = StyleSheet.create({
   dropdownBtn: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(8,47,61,0.55)",
+    backgroundColor: "rgba(239,255,249,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(236,255,248,0.28)",
+    borderColor: "rgba(236,255,248,0.35)",
     borderRadius: 14,
     padding: 12,
   },
@@ -1215,10 +1215,10 @@ const styles = StyleSheet.create({
   dropdownCourseSub: { color: "#9AD8ED", fontSize: 11, marginTop: 3 },
 
   ratingSection: {
-    backgroundColor: "rgba(8,47,61,0.35)",
+    backgroundColor: "rgba(239,255,249,0.12)",
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "rgba(236,255,248,0.18)",
+    borderColor: "rgba(236,255,248,0.35)",
     padding: 12,
     marginVertical: 12,
     gap: 8,
@@ -1244,9 +1244,9 @@ const styles = StyleSheet.create({
   },
 
   commentInput: {
-    backgroundColor: "rgba(8,47,61,0.45)",
+    backgroundColor: "rgba(239,255,249,0.12)",
     borderWidth: 1,
-    borderColor: "rgba(236,255,248,0.28)",
+    borderColor: "rgba(236,255,248,0.35)",
     borderRadius: 14,
     padding: 12,
     color: "#F0FFF9",
@@ -1272,7 +1272,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderRadius: 13,
     borderWidth: 1,
-    borderColor: "rgba(236,255,248,0.3)",
+    borderColor: "rgba(236,255,248,0.35)",
     paddingVertical: 12,
     marginTop: 16,
   },
@@ -1313,11 +1313,11 @@ const styles = StyleSheet.create({
   courseSelectCard: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(8,47,61,0.6)",
+    backgroundColor: "rgba(239,255,249,0.12)",
     borderRadius: 14,
     padding: 14,
     borderWidth: 1,
-    borderColor: "rgba(236,255,248,0.18)",
+    borderColor: "rgba(236,255,248,0.35)",
   },
   courseCardName: { color: "#F0FFF9", fontSize: 15, fontWeight: "800" },
   courseCardMeta: { color: "#9AD8ED", fontSize: 11, marginTop: 3 },
@@ -1348,7 +1348,7 @@ const styles = StyleSheet.create({
   },
   option: {
     borderWidth: 1,
-    borderColor: "rgba(236,255,248,0.3)",
+    borderColor: "rgba(236,255,248,0.35)",
     borderRadius: 13,
     padding: 14,
     marginTop: 9,
@@ -1391,7 +1391,7 @@ const styles = StyleSheet.create({
   courseSelectItem: {
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderColor: "rgba(236,255,248,0.12)",
+    borderColor: "rgba(236,255,248,0.35)",
   },
   courseSelectItemActive: {
     backgroundColor: "rgba(242,193,78,0.15)",
@@ -1402,12 +1402,12 @@ const styles = StyleSheet.create({
   courseSelectDetail: { color: "#9AD8ED", fontSize: 12, marginTop: 3 },
 
   singleEvalCard: {
-    backgroundColor: "rgba(8,47,61,0.5)",
+    backgroundColor: "rgba(239,255,249,0.12)",
     borderRadius: 12,
     padding: 12,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "rgba(236,255,248,0.12)",
+    borderColor: "rgba(236,255,248,0.35)",
   },
   evalScoreRow: { flexDirection: "row", alignItems: "center", marginBottom: 5 },
   scoreText: { color: "#F2C14E", fontSize: 12, fontWeight: "700" },
@@ -1443,3 +1443,4 @@ const styles = StyleSheet.create({
   pageBtnTextDisabled: { color: "#5C7E77" },
   pageInfoText: { color: "#A9CEC3", fontSize: 11, fontWeight: "700" },
 });
+
