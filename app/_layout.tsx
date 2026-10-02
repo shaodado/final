@@ -9,7 +9,7 @@ export const unstable_settings = {
   anchor: "(tabs)",
 };
 
-export type UserRole = "admin" | "teacher" | "student";
+export type UserRole = "Manager" | "teacher" | "student";
 
 type AuthContextValue = {
   role: UserRole | null;
@@ -66,10 +66,8 @@ export default function RootLayout() {
             />
           </Stack.Protected>
 
-          {/* 學生或管理員皆可存取學生專區 */}
-          <Stack.Protected
-            guard={isSignedIn && (role === "admin" || role === "student")}
-          >
+          {/* 學生專區（僅學生） */}
+          <Stack.Protected guard={isSignedIn && role === "student"}>
             <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
             <Stack.Screen name="mood" options={{ headerShown: false }} />
             <Stack.Screen name="notes" options={{ headerShown: false }} />
@@ -99,6 +97,11 @@ export default function RootLayout() {
               name="teacher-assign-ta"
               options={{ headerShown: false }}
             />
+          </Stack.Protected>
+
+          {/* 管理員專區 */}
+          <Stack.Protected guard={isSignedIn && role === "Manager"}>
+            <Stack.Screen name="Manager" options={{ headerShown: false }} />
           </Stack.Protected>
         </Stack>
         <StatusBar style="light" />
