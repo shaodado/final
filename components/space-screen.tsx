@@ -40,7 +40,7 @@ export function SpaceScreen({
 
 const styles = StyleSheet.create({
   screen: { flex: 1, overflow: 'hidden', backgroundColor: '#172b49' },
-  base: { ...StyleSheet.absoluteFillObject, backgroundColor: '#172b49' },
+  base: { ...StyleSheet.absoluteFill, backgroundColor: '#172b49' },
   tint: { position: 'absolute', top: '38%', left: -90, right: -90, bottom: -100, borderRadius: 240, opacity: 0.84 },
   header: { paddingTop: 58, paddingHorizontal: 24, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backButton: { flexDirection: 'row', alignItems: 'center', gap: 5, padding: 5 },
