@@ -236,10 +236,6 @@ export default function MoodScreen() {
       setComment("");
       setMyCoursePage(1);
       fetchMyCourses(1);
-      setTimeout(
-        () => scrollViewRef.current?.scrollToEnd({ animated: true }),
-        150
-      );
     }
 
     if (nextPanel === "quiz") {
@@ -333,9 +329,9 @@ export default function MoodScreen() {
                 paddingBottom:
                   keyboardHeight > 0
                     ? Platform.OS === "ios"
-                      ? 40
-                      : keyboardHeight + 20
-                    : 40,
+                      ? 120
+                      : keyboardHeight + 80
+                    : 120,
               },
             ]}
             keyboardShouldPersistTaps="handled"
@@ -760,10 +756,10 @@ export default function MoodScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
 
-        {/* 彈出視窗 1：選擇已修課程 Modal（升級 75% 高度與每頁 20 筆分頁列） */}
+        {/* 彈出視窗 1：選擇已修課程 Modal（升級 85% 高度與每頁 20 筆分頁列） */}
         <Modal visible={courseModalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
-            <View style={[styles.modalContent, { height: "75%" }]}>
+            <View style={[styles.modalContent, { height: "85%" }]}>
               <View style={styles.modalHeader}>
                 <View style={{ flex: 1, paddingRight: 10 }}>
                   <Text style={styles.modalTitle}>選擇已修課程</Text>
