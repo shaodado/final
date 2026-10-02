@@ -8,7 +8,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView, // 👈 1. 引入 ScrollView
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -36,7 +36,6 @@ export default function LoginScreen() {
 
     try {
       setLoading(true);
-      // @ts-ignore
       const baseUrl =
         process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
@@ -52,6 +51,8 @@ export default function LoginScreen() {
       const data = await res.json();
 
       if (data.success) {
+        // role 可能是 "student" / "teacher" / "admin"
+        // signIn 會把角色存入 context，由 _layout 依角色導向對應頁面
         signIn(data.role, data.userId, data.name);
       } else {
         Alert.alert("登入失敗", data.message || "帳號或密碼不正確。");
@@ -75,7 +76,6 @@ export default function LoginScreen() {
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
         >
-          {/* 👈 2. 加入可捲動容器，並設定點擊空白收合鍵盤 */}
           <ScrollView
             contentContainerStyle={styles.scrollContainer}
             keyboardShouldPersistTaps="handled"
@@ -86,7 +86,6 @@ export default function LoginScreen() {
               accessible={false}
             >
               <View style={styles.innerContainer}>
-                {/* 標題與 Logo */}
                 <View style={styles.hero}>
                   <View style={styles.logo}>
                     <Ionicons name="school-outline" size={33} color="#16445A" />
@@ -98,14 +97,12 @@ export default function LoginScreen() {
                   </Text>
                 </View>
 
-                {/* 登入卡片 */}
                 <LinearGradient
                   colors={["rgba(239,255,249,0.28)", "rgba(172,224,208,0.1)"]}
                   style={styles.card}
                 >
                   <Text style={styles.cardTitle}>登入帳號</Text>
 
-                  {/* 帳號 */}
                   <Text style={styles.label}>帳號</Text>
                   <View style={styles.inputWrap}>
                     <Ionicons name="person-outline" size={19} color="#A9CEC3" />
@@ -114,14 +111,13 @@ export default function LoginScreen() {
                       onChangeText={setAccount}
                       autoCapitalize="none"
                       autoCorrect={false}
-                      placeholder="學號 (例: 3001) 或 工號 (例: 1001)"
+                      placeholder="學號、工號或管理員帳號"
                       placeholderTextColor="#7BA79C"
                       style={styles.input}
                       returnKeyType="next"
                     />
                   </View>
 
-                  {/* 密碼 */}
                   <Text style={styles.label}>密碼</Text>
                   <View style={styles.inputWrap}>
                     <Ionicons
@@ -151,7 +147,6 @@ export default function LoginScreen() {
                     </Pressable>
                   </View>
 
-                  {/* 登入按鈕 */}
                   <Pressable
                     style={[styles.loginButton, loading && { opacity: 0.7 }]}
                     onPress={login}
@@ -173,7 +168,7 @@ export default function LoginScreen() {
                   </Pressable>
 
                   <Text style={styles.hint}>
-                    測試帳號：學生 3001 (密碼 123) · 老師 1001 (密碼 321)
+                    測試帳號：學生 3001 (密碼 123) · 老師 1001 (密碼 321) · 管理員 2001 (密碼 123)
                   </Text>
                 </LinearGradient>
               </View>
@@ -189,10 +184,10 @@ const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: "#16445A" },
   safeArea: { flex: 1 },
   scrollContainer: {
-    flexGrow: 1, // 讓內容未超過螢幕時自動伸展滿版
-    justifyContent: "center", // 平常垂直置中
+    flexGrow: 1,
+    justifyContent: "center",
     paddingHorizontal: 24,
-    paddingVertical: 30, // 上下留點彈性，鍵盤彈起時滑到底部不會貼邊
+    paddingVertical: 30,
   },
   innerContainer: {
     width: "100%",
