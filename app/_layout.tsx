@@ -1,6 +1,12 @@
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from "expo-router";
+import {
+  DarkTheme,
+  DefaultTheme,
+  Stack,
+  ThemeProvider,
+  useRouter,
+} from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import "react-native-reanimated";
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
@@ -9,7 +15,7 @@ export const unstable_settings = {
   anchor: "(tabs)",
 };
 
-export type UserRole = "Manager" | "teacher" | "student";
+export type UserRole = "manager" | "teacher" | "student";
 
 type AuthContextValue = {
   role: UserRole | null;
@@ -30,6 +36,8 @@ export function useAuth() {
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
+  const router = useRouter();
+
   const [role, setRole] = useState<UserRole | null>(null);
   const [userId, setUserId] = useState<number | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
@@ -40,7 +48,13 @@ export default function RootLayout() {
     nextUserId: number,
     nextUserName: string
   ) => {
-    setRole(nextRole);
+    // 後端回傳的是 "Manager"（大寫），統一轉成小寫再比對守衛
+    const normalizedRole = String(nextRole).toLowerCase() as UserRole;
+
+    // 確認沒問題後可以刪掉這行
+    console.log("signIn role:", nextRole, "→", normalizedRole);
+
+    setRole(normalizedRole);
     setUserId(nextUserId);
     setUserName(nextUserName);
     setIsSignedIn(true);
@@ -52,6 +66,16 @@ export default function RootLayout() {
     setUserName(null);
     setIsSignedIn(false);
   };
+
+  // 保險：從「已登入」變成「未登入」時，明確導回登入頁
+  // 放在 effect 裡，才會等守衛更新完、登入頁開放之後才導向
+  const wasSignedIn = useRef(false);
+  useEffect(() => {
+    if (wasSignedIn.current && !isSignedIn) {
+      router.replace("/login" as never);
+    }
+    wasSignedIn.current = isSignedIn;
+  }, [isSignedIn, router]);
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
@@ -99,9 +123,21 @@ export default function RootLayout() {
             />
           </Stack.Protected>
 
-          {/* 管理員專區 */}
-          <Stack.Protected guard={isSignedIn && role === "Manager"}>
-            <Stack.Screen name="Manager" options={{ headerShown: false }} />
+          {/* 管理員專區（名稱必須和檔名完全一致：小寫） */}
+          <Stack.Protected guard={isSignedIn && role === "manager"}>
+            <Stack.Screen name="manager" options={{ headerShown: false }} />
+            <Stack.Screen
+              name="manager-announcements"
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="manager-accounts"
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="manager-evaluations"
+              options={{ headerShown: false }}
+            />
           </Stack.Protected>
         </Stack>
         <StatusBar style="light" />
