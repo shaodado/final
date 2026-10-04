@@ -43,7 +43,6 @@ function getApiBase(): string {
         ? `http://10.0.2.2:${API_PORT}`
         : `http://localhost:${API_PORT}`;
 }
-
 const API_BASE = getApiBase();
 const LAST_READ_KEY = "@manager_last_read_school_announcement";
 
