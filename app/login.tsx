@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   ActivityIndicator,
   Alert,
@@ -26,7 +27,30 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [showConsentModal, setShowConsentModal] = useState(true);
+  const [showConsentModal, setShowConsentModal] = useState(false);
+
+  useEffect(() => {
+    const checkConsent = async () => {
+      try {
+        const agreed = await AsyncStorage.getItem("hasAgreedConsent");
+        if (agreed !== "true") {
+          setShowConsentModal(true);
+        }
+      } catch (error) {
+        setShowConsentModal(true);
+      }
+    };
+    checkConsent();
+  }, []);
+
+  const handleAcceptConsent = async () => {
+    try {
+      await AsyncStorage.setItem("hasAgreedConsent", "true");
+    } catch (error) {
+      console.error(error);
+    }
+    setShowConsentModal(false);
+  };
 
   const login = async () => {
     const trimmedAccount = account.trim();
@@ -448,7 +472,7 @@ export default function LoginScreen() {
               </Pressable>
               <Pressable
                 style={[styles.modalBtn, styles.modalBtnAccept]}
-                onPress={() => setShowConsentModal(false)}
+                onPress={handleAcceptConsent}
               >
                 <Text style={styles.modalBtnAcceptText}>我同意</Text>
               </Pressable>
