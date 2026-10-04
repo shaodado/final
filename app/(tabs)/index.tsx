@@ -65,6 +65,7 @@ export default function HomeScreen() {
     SchoolAnnouncement[]
   >([]);
   const [showSchoolModal, setShowSchoolModal] = useState<boolean>(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState<boolean>(false);
   const [hasUnread, setHasUnread] = useState<boolean>(false);
 
   // 進入畫面時向後端查詢最新校級公告，並比對學生端未讀紅點
@@ -110,7 +111,15 @@ export default function HomeScreen() {
     }
   };
 
+  // 按「登出」：先跳出確認視窗
   const handleLogout = (): void => {
+    setShowLogoutConfirm(true);
+  };
+
+  // 確認視窗按下「登出」：才真的登出
+  // 確認視窗不是 Modal，所以不會有「關閉動畫吃掉登出」的問題
+  const handleConfirmLogout = (): void => {
+    setShowLogoutConfirm(false);
     signOut();
   };
 
@@ -192,7 +201,12 @@ export default function HomeScreen() {
       </SafeAreaView>
 
       {/* 校級公告獨立彈窗 (Modal) */}
-      <Modal visible={showSchoolModal} transparent animationType="slide">
+      <Modal
+        visible={showSchoolModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowSchoolModal(false)}
+      >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -241,6 +255,38 @@ export default function HomeScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* 登出確認（覆蓋層，不使用 Modal） */}
+      {showLogoutConfirm && (
+        <View style={styles.dialogBackdrop} accessibilityViewIsModal>
+          <Pressable
+            style={StyleSheet.absoluteFill}
+            onPress={() => setShowLogoutConfirm(false)}
+          />
+
+          <View style={styles.dialog}>
+            <Text style={styles.dialogTitle}>要登出嗎？</Text>
+            <Text style={styles.dialogText}>
+              登出後需要重新輸入帳號密碼才能進入你的專屬空間。
+            </Text>
+
+            <View style={styles.dialogActions}>
+              <Pressable
+                onPress={() => setShowLogoutConfirm(false)}
+                style={[styles.dialogButton, styles.dialogCancel]}
+              >
+                <Text style={styles.dialogCancelText}>取消</Text>
+              </Pressable>
+              <Pressable
+                onPress={handleConfirmLogout}
+                style={[styles.dialogButton, styles.dialogConfirm]}
+              >
+                <Text style={styles.dialogConfirmText}>登出</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -568,5 +614,63 @@ const styles = StyleSheet.create({
     color: "#DDEFE7",
     fontSize: 13,
     lineHeight: 19,
+  },
+
+  // 登出確認（覆蓋層）
+  dialogBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 50,
+    elevation: 50,
+    justifyContent: "center",
+    paddingHorizontal: 32,
+    backgroundColor: "rgba(0,0,0,0.55)",
+  },
+  dialog: {
+    backgroundColor: "#F0FFF9",
+    borderRadius: 32,
+    padding: 24,
+  },
+  dialogTitle: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#16445A",
+    marginBottom: 8,
+  },
+  dialogText: {
+    fontSize: 14,
+    lineHeight: 21,
+    color: "#426875",
+  },
+  dialogActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 22,
+  },
+  dialogButton: {
+    flex: 1,
+    height: 48,
+    borderRadius: 999,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  dialogCancel: {
+    backgroundColor: "rgba(22,68,90,0.10)",
+  },
+  dialogCancelText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#16445A",
+  },
+  dialogConfirm: {
+    backgroundColor: "#F2C14E",
+  },
+  dialogConfirmText: {
+    fontSize: 15,
+    fontWeight: "800",
+    color: "#16445A",
   },
 });
