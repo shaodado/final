@@ -909,7 +909,7 @@ const styles = StyleSheet.create({
     dialogCancel: {
         backgroundColor: "rgba(22,68,90,0.10)",
     },
-
+    
     dialogCancelText: {
         fontSize: 15,
         fontWeight: "800",
