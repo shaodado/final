@@ -1,6 +1,7 @@
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
+import random
 
 from bson import ObjectId
 from fastapi import FastAPI, HTTPException
@@ -21,6 +22,14 @@ from mcu_crawler import MCUAuthError, MCUCrawlerError, crawl_mcu_transcript
 class LoginRequest(BaseModel):
     account: str
     password: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    code: str
+    new_password: str
 
 
 # -------------------------
@@ -309,6 +318,69 @@ def register(req: LoginRequest):
             "success": True,
             "message": "註冊成功",
         }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/forgot-password")
+def forgot_password(req: ForgotPasswordRequest):
+    try:
+        # 確認該信箱是否存在於學生資料庫
+        student = db["STUDENT"].find_one({"email": req.email})
+        if not student:
+            return {"success": False, "message": "找不到此信箱對應的帳號"}
+
+        # 產生 6 位數驗證碼
+        code = str(random.randint(100000, 999999))
+
+        # 儲存到 VERIFICATION_CODE 集合 (設定 10 分鐘後過期)
+        db["VERIFICATION_CODE"].delete_many({"email": req.email}) # 刪除舊的驗證碼
+        db["VERIFICATION_CODE"].insert_one({
+            "email": req.email,
+            "code": code,
+            "expires_at": datetime.now() + timedelta(minutes=10)
+        })
+
+        # 這裡由於環境沒有設定 SMTP，先將驗證碼印在後端 Console，並提示使用者。
+        # 實務上請使用 smtplib 將 code 寄出
+        print(f"\n=============================================")
+        print(f" [模擬發送信件] 收件人: {req.email}")
+        print(f" [驗證碼]: {code}")
+        print(f"=============================================\n")
+
+        return {"success": True, "message": "驗證碼已寄出（請查看後端終端機模擬的信件）"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/reset-password")
+def reset_password(req: ResetPasswordRequest):
+    try:
+        # 尋找驗證碼記錄
+        record = db["VERIFICATION_CODE"].find_one({
+            "email": req.email,
+            "code": req.code
+        })
+
+        if not record:
+            return {"success": False, "message": "驗證碼錯誤或不存在"}
+
+        # 檢查是否過期
+        if datetime.now() > record["expires_at"]:
+            return {"success": False, "message": "驗證碼已過期，請重新獲取"}
+
+        # 更新密碼
+        db["STUDENT"].update_one(
+            {"email": req.email},
+            {"$set": {"password": req.new_password}}
+        )
+
+        # 刪除已使用的驗證碼
+        db["VERIFICATION_CODE"].delete_many({"email": req.email})
+
+        return {"success": True, "message": "密碼修改成功，請使用新密碼登入！"}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

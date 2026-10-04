@@ -71,6 +71,12 @@ export default function LoginScreen() {
   const [regAccount, setRegAccount] = useState("");
   const [regPassword, setRegPassword] = useState("");
 
+  const [showForgotModal, setShowForgotModal] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotCode, setForgotCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [forgotStep, setForgotStep] = useState(1);
+
   const handleRegister = async () => {
     const trimmedAccount = regAccount.trim();
     const trimmedPassword = regPassword.trim();
@@ -121,6 +127,76 @@ export default function LoginScreen() {
     } catch (error) {
       console.error("註冊錯誤:", error);
       Alert.alert("註冊失敗", "無法連線至伺服器，請確認電腦後端是否已啟動。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRequestCode = async () => {
+    if (!forgotEmail.trim()) {
+      Alert.alert("請填寫完整", "請輸入您註冊時使用的學校信箱。");
+      return;
+    }
+    try {
+      setLoading(true);
+      const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${baseUrl}/api/forgot-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail.trim() }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        Alert.alert("驗證碼已寄出", data.message);
+        setForgotStep(2);
+      } else {
+        Alert.alert("錯誤", data.message || "無法寄送驗證碼");
+      }
+    } catch (error) {
+      Alert.alert("連線失敗", "系統發生錯誤。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!forgotCode.trim() || !newPassword.trim()) {
+      Alert.alert("請填寫完整", "請輸入驗證碼與新密碼。");
+      return;
+    }
+    const pwdRegex = /^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z0-9]{1,10}$/;
+    if (!pwdRegex.test(newPassword.trim())) {
+      Alert.alert("密碼格式錯誤", "新密碼必須是英文與數字混合，且最多 10 碼。");
+      return;
+    }
+    try {
+      setLoading(true);
+      const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const res = await fetch(`${baseUrl}/api/reset-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: forgotEmail.trim(),
+          code: forgotCode.trim(),
+          new_password: newPassword.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        Alert.alert("成功", data.message, [
+          { text: "確定", onPress: () => {
+              setShowForgotModal(false);
+              setForgotStep(1);
+              setForgotCode("");
+              setNewPassword("");
+              setAccount(forgotEmail.trim());
+          }}
+        ]);
+      } else {
+        Alert.alert("錯誤", data.message || "密碼重設失敗");
+      }
+    } catch (error) {
+      Alert.alert("連線失敗", "系統發生錯誤。");
     } finally {
       setLoading(false);
     }
@@ -325,6 +401,12 @@ export default function LoginScreen() {
                         </Text>
                       </Pressable>
 
+                      <Pressable onPress={() => { setShowForgotModal(true); setForgotStep(1); setForgotEmail(""); setForgotCode(""); setNewPassword(""); }} style={{ marginTop: 8 }}>
+                        <Text style={[styles.hint, { color: "#C3E0D8", fontSize: 12 }]}>
+                          忘記密碼？
+                        </Text>
+                      </Pressable>
+
                       <Text style={styles.hint}>
                         測試帳號：學生 3001 (密碼 123) · 老師 1001 (密碼 321) · 管理員 2001 (密碼 123)
                       </Text>
@@ -374,6 +456,90 @@ export default function LoginScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* 忘記密碼 Modal */}
+      <Modal visible={showForgotModal} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: "60%" }]}>
+            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <Text style={styles.modalTitle}>忘記密碼</Text>
+              <Pressable onPress={() => setShowForgotModal(false)} hitSlop={10}>
+                <Ionicons name="close" size={24} color="#F0FFF9" />
+              </Pressable>
+            </View>
+
+            {forgotStep === 1 ? (
+              <View>
+                <Text style={styles.label}>請輸入註冊信箱</Text>
+                <View style={styles.inputWrap}>
+                  <Ionicons name="mail-outline" size={19} color="#A9CEC3" />
+                  <TextInput
+                    value={forgotEmail}
+                    onChangeText={setForgotEmail}
+                    autoCapitalize="none"
+                    placeholder="請輸入學校信箱"
+                    placeholderTextColor="#7BA79C"
+                    style={styles.input}
+                  />
+                  {!forgotEmail.includes("@") && forgotEmail.length > 0 && (
+                    <Pressable
+                      onPress={() => setForgotEmail(forgotEmail + "@me.mcu.edu.tw")}
+                      style={styles.appendSuffixBtn}
+                    >
+                      <Text style={styles.appendSuffixText}>補全信箱</Text>
+                    </Pressable>
+                  )}
+                </View>
+                <Pressable
+                  style={[styles.loginButton, loading && { opacity: 0.7 }, { marginTop: 20 }]}
+                  onPress={handleRequestCode}
+                  disabled={loading}
+                >
+                  {loading ? <ActivityIndicator color="#16445A" /> : <Text style={styles.loginText}>發送驗證碼</Text>}
+                </Pressable>
+              </View>
+            ) : (
+              <View>
+                <Text style={styles.label}>驗證碼</Text>
+                <View style={styles.inputWrap}>
+                  <Ionicons name="keypad-outline" size={19} color="#A9CEC3" />
+                  <TextInput
+                    value={forgotCode}
+                    onChangeText={setForgotCode}
+                    keyboardType="number-pad"
+                    placeholder="請輸入6位數驗證碼"
+                    placeholderTextColor="#7BA79C"
+                    style={styles.input}
+                    maxLength={6}
+                  />
+                </View>
+
+                <Text style={styles.label}>新密碼</Text>
+                <View style={styles.inputWrap}>
+                  <Ionicons name="lock-closed-outline" size={18} color="#A9CEC3" />
+                  <TextInput
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    secureTextEntry
+                    placeholder="請設定新密碼"
+                    placeholderTextColor="#7BA79C"
+                    style={styles.input}
+                  />
+                </View>
+
+                <Pressable
+                  style={[styles.loginButton, loading && { opacity: 0.7 }, { marginTop: 20 }]}
+                  onPress={handleResetPassword}
+                  disabled={loading}
+                >
+                  {loading ? <ActivityIndicator color="#16445A" /> : <Text style={styles.loginText}>重設密碼</Text>}
+                </Pressable>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
