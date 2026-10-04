@@ -1,6 +1,6 @@
 import re
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Dict
 import random
 
 from bson import ObjectId
@@ -1319,7 +1319,7 @@ def sync_student_transcript(req: TranscriptSyncRequest):
                         "audit_updated_at": now_str,
                     }
                 },
-                upsert=False,
+                upsert=True,
             )
 
         # 4. 回傳結果（密碼變數隨函式結束立即銷毀）
@@ -1341,13 +1341,14 @@ def sync_student_transcript(req: TranscriptSyncRequest):
 # =============================================================
 # 28. 學生畢業學分進度條（運算引擎）
 # =============================================================
+# Python_BackEnd/main.py 端點 28
 @app.get("/api/student/graduation-progress")
 def get_graduation_progress(user_id: int, required_threshold: int = 128):
     try:
-        # 從 STUDENT_ACADEMIC_RECORD 取出該學生的所有修課紀錄
+        student_info = db["STUDENT"].find_one({"user_id": user_id})
         records = list(db["STUDENT_ACADEMIC_RECORD"].find({"user_id": user_id}))
 
-        if not records:
+        if not records and not student_info:
             return {
                 "success": True,
                 "has_data": False,
@@ -1355,32 +1356,48 @@ def get_graduation_progress(user_id: int, required_threshold: int = 128):
                 "progress_percentage": 0.0,
                 "earned_credits": 0,
                 "required_threshold": required_threshold,
-                "categories": {},
+                "remaining_credits": required_threshold,
+                "category_breakdown": {},
+                "courses_by_category": {},
             }
 
-        # 分類統計修得學分
         categories: Dict[str, float] = {}
-        total_earned = 0.0
+        courses_by_category: Dict[str, list] = {}
+        calc_total = 0.0
 
         for r in records:
-            if r.get("is_passed", False):
-                credit = float(r.get("earned_credits", r.get("credits", 0.0)))
-                cat = r.get("category", "其他")
-                categories[cat] = categories.get(cat, 0.0) + credit
-                total_earned += credit
+            cat = r.get("category", "其他")
+            credit = float(r.get("earned_credits", r.get("credits", 0.0)))
+            is_passed = r.get("is_passed", False)
 
-        # 計算進度百分比（上限 100%）
-        percentage = min(100.0, round((total_earned / required_threshold) * 100, 1))
+            if is_passed:
+                categories[cat] = round(categories.get(cat, 0.0) + credit, 1)
+                calc_total += credit
+
+            # 歸納該向度下的修課清單
+            if cat not in courses_by_category:
+                courses_by_category[cat] = []
+            courses_by_category[cat].append({
+                "course_name": r.get("course_name", "未知課程"),
+                "credits": float(r.get("credits", 0.0)),
+                "score": r.get("score"),
+                "is_passed": is_passed,
+            })
+
+        official_credits = student_info.get("total_grad_credits") if student_info else None
+        final_earned = float(official_credits) if official_credits is not None and official_credits > 0 else calc_total
+        percentage = min(100.0, round((final_earned / required_threshold) * 100, 1))
 
         return {
             "success": True,
             "has_data": True,
             "user_id": user_id,
             "progress_percentage": percentage,
-            "earned_credits": total_earned,
+            "earned_credits": final_earned,
             "required_threshold": required_threshold,
-            "remaining_credits": max(0.0, required_threshold - total_earned),
+            "remaining_credits": max(0.0, round(required_threshold - final_earned, 1)),
             "category_breakdown": categories,
+            "courses_by_category": courses_by_category,
         }
 
     except Exception as e:

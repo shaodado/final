@@ -103,17 +103,24 @@ def crawl_mcu_transcript(student_id: str, password: str) -> Tuple[Dict[str, int]
             if summary:
                 break
 
-    # 4.2 修課明細
+    # 4.2 修課明細（加強版：支援 rowspan 與通識向度繼承）
     raw_courses = []
+    current_category = "通識課程"
+
     for table in soup.find_all("table"):
         for row in table.find_all("tr"):
             cells = [td.get_text(strip=True) for td in row.find_all(["td", "th"])]
-            if len(cells) >= 8 and cells[2].isdigit() and cells[5].isdigit():
-                category = cells[1]
+
+            # 情況 A：完整 8 格以上（包含 category）
+            if len(cells) >= 8 and any(char.isdigit() for char in cells[2]) and any(char.isdigit() for char in cells[5]):
+                current_category = cells[1] if cells[1] else current_category
                 course_id = cells[2]
                 course_name = cells[3]
                 term = cells[4]
-                credit = float(cells[5])
+                try:
+                    credit = float(cells[5])
+                except ValueError:
+                    continue
                 score_str = cells[6]
                 pass_status_str = cells[7]
 
@@ -123,7 +130,7 @@ def crawl_mcu_transcript(student_id: str, password: str) -> Tuple[Dict[str, int]
                 raw_courses.append({
                     "course_id": course_id,
                     "course_name": course_name,
-                    "category": category,
+                    "category": current_category,
                     "semester_term": term,
                     "credits": credit,
                     "score": score,
@@ -131,6 +138,31 @@ def crawl_mcu_transcript(student_id: str, password: str) -> Tuple[Dict[str, int]
                     "earned_credits": credit if is_passed else 0.0,
                 })
 
+            # 情況 B：因 rowspan 合併縮為 7 格（缺少 category，向前繼承）
+            elif len(cells) == 7 and any(char.isdigit() for char in cells[1]) and any(char.isdigit() for char in cells[4]):
+                course_id = cells[1]
+                course_name = cells[2]
+                term = cells[3]
+                try:
+                    credit = float(cells[4])
+                except ValueError:
+                    continue
+                score_str = cells[5]
+                pass_status_str = cells[6]
+
+                score = float(score_str) if score_str.replace(".", "", 1).isdigit() else None
+                is_passed = (pass_status_str == "是") or (score is not None and score >= 60)
+
+                raw_courses.append({
+                    "course_id": course_id,
+                    "course_name": course_name,
+                    "category": current_category,
+                    "semester_term": term,
+                    "credits": credit,
+                    "score": score,
+                    "is_passed": is_passed,
+                    "earned_credits": credit if is_passed else 0.0,
+                })
     # 去除巢狀表格重複列
     unique_courses = []
     seen = set()
