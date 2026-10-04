@@ -67,6 +67,65 @@ export default function LoginScreen() {
     }
   };
 
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [regAccount, setRegAccount] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+
+  const handleRegister = async () => {
+    const trimmedAccount = regAccount.trim();
+    const trimmedPassword = regPassword.trim();
+
+    if (!trimmedAccount || !trimmedPassword) {
+      Alert.alert("請填寫完整", "請輸入註冊信箱與密碼。");
+      return;
+    }
+
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@me\.mcu\.edu\.tw$/;
+    if (!emailRegex.test(trimmedAccount)) {
+      Alert.alert("信箱格式錯誤", "註冊信箱必須為學校發的 email，後綴須為 @me.mcu.edu.tw。");
+      return;
+    }
+
+    const pwdRegex = /^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z0-9]{1,10}$/;
+    if (!pwdRegex.test(trimmedPassword)) {
+      Alert.alert("密碼格式錯誤", "密碼必須是英文與數字混合，且最多 10 碼（不可包含特殊符號）。");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+      const res = await fetch(`${baseUrl}/api/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          account: trimmedAccount,
+          password: trimmedPassword,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        Alert.alert("註冊成功", "您的帳號已成功建立，請使用新帳號登入。", [
+          { text: "確定", onPress: () => {
+              setIsRegistering(false);
+              setAccount(trimmedAccount);
+              setPassword("");
+          } }
+        ]);
+      } else {
+        Alert.alert("註冊失敗", data.message || "請稍後再試。");
+      }
+    } catch (error) {
+      console.error("註冊錯誤:", error);
+      Alert.alert("註冊失敗", "無法連線至伺服器，請確認電腦後端是否已啟動。");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <View style={styles.page}>
       <View style={[styles.glow, styles.glowTop]} />
@@ -103,75 +162,158 @@ export default function LoginScreen() {
                   colors={["rgba(239,255,249,0.28)", "rgba(172,224,208,0.1)"]}
                   style={styles.card}
                 >
-                  <Text style={styles.cardTitle}>登入帳號</Text>
+                  <Text style={styles.cardTitle}>{isRegistering ? "註冊學生帳號" : "登入帳號"}</Text>
 
-                  <Text style={styles.label}>帳號</Text>
-                  <View style={styles.inputWrap}>
-                    <Ionicons name="person-outline" size={19} color="#A9CEC3" />
-                    <TextInput
-                      value={account}
-                      onChangeText={setAccount}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      placeholder="學號、工號或管理員帳號"
-                      placeholderTextColor="#7BA79C"
-                      style={styles.input}
-                      returnKeyType="next"
-                    />
-                  </View>
-
-                  <Text style={styles.label}>密碼</Text>
-                  <View style={styles.inputWrap}>
-                    <Ionicons
-                      name="lock-closed-outline"
-                      size={18}
-                      color="#A9CEC3"
-                    />
-                    <TextInput
-                      value={password}
-                      onChangeText={setPassword}
-                      secureTextEntry={!showPassword}
-                      placeholder="請輸入密碼"
-                      placeholderTextColor="#7BA79C"
-                      style={styles.input}
-                      returnKeyType="done"
-                      onSubmitEditing={login}
-                    />
-                    <Pressable
-                      onPress={() => setShowPassword(!showPassword)}
-                      hitSlop={10}
-                    >
-                      <Ionicons
-                        name={showPassword ? "eye-off-outline" : "eye-outline"}
-                        size={20}
-                        color="#A9CEC3"
-                      />
-                    </Pressable>
-                  </View>
-
-                  <Pressable
-                    style={[styles.loginButton, loading && { opacity: 0.7 }]}
-                    onPress={login}
-                    disabled={loading}
-                    accessibilityRole="button"
-                  >
-                    {loading ? (
-                      <ActivityIndicator color="#16445A" />
-                    ) : (
-                      <>
-                        <Text style={styles.loginText}>登入</Text>
-                        <Ionicons
-                          name="arrow-forward"
-                          size={19}
-                          color="#16445A"
+                  {isRegistering ? (
+                    <>
+                      <Text style={styles.label}>學校信箱 (@me.mcu.edu.tw)</Text>
+                      <View style={styles.inputWrap}>
+                        <Ionicons name="mail-outline" size={19} color="#A9CEC3" />
+                        <TextInput
+                          value={regAccount}
+                          onChangeText={setRegAccount}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          placeholder="請輸入學校信箱"
+                          placeholderTextColor="#7BA79C"
+                          style={styles.input}
+                          returnKeyType="next"
                         />
-                      </>
-                    )}
-                  </Pressable>
+                      </View>
 
-                  <Text style={styles.hint}>
-                    測試帳號：學生 3001 (密碼 123) · 老師 1001 (密碼 321) · 管理員 2001 (密碼 123)
-                  </Text>
+                      <Text style={styles.label}>密碼 (英數混合，最多10碼)</Text>
+                      <View style={styles.inputWrap}>
+                        <Ionicons
+                          name="lock-closed-outline"
+                          size={18}
+                          color="#A9CEC3"
+                        />
+                        <TextInput
+                          value={regPassword}
+                          onChangeText={setRegPassword}
+                          secureTextEntry={!showPassword}
+                          placeholder="請設定密碼"
+                          placeholderTextColor="#7BA79C"
+                          style={styles.input}
+                          returnKeyType="done"
+                          onSubmitEditing={handleRegister}
+                        />
+                        <Pressable
+                          onPress={() => setShowPassword(!showPassword)}
+                          hitSlop={10}
+                        >
+                          <Ionicons
+                            name={showPassword ? "eye-off-outline" : "eye-outline"}
+                            size={20}
+                            color="#A9CEC3"
+                          />
+                        </Pressable>
+                      </View>
+
+                      <Pressable
+                        style={[styles.loginButton, loading && { opacity: 0.7 }]}
+                        onPress={handleRegister}
+                        disabled={loading}
+                        accessibilityRole="button"
+                      >
+                        {loading ? (
+                          <ActivityIndicator color="#16445A" />
+                        ) : (
+                          <>
+                            <Text style={styles.loginText}>立即註冊</Text>
+                            <Ionicons
+                              name="person-add-outline"
+                              size={18}
+                              color="#16445A"
+                              style={{ marginLeft: 4 }}
+                            />
+                          </>
+                        )}
+                      </Pressable>
+
+                      <Pressable onPress={() => setIsRegistering(false)} style={{ marginTop: 16 }}>
+                        <Text style={[styles.hint, { color: "#F2C14E", fontSize: 13 }]}>
+                          已有帳號？點此登入
+                        </Text>
+                      </Pressable>
+                    </>
+                  ) : (
+                    <>
+                      <Text style={styles.label}>帳號</Text>
+                      <View style={styles.inputWrap}>
+                        <Ionicons name="person-outline" size={19} color="#A9CEC3" />
+                        <TextInput
+                          value={account}
+                          onChangeText={setAccount}
+                          autoCapitalize="none"
+                          autoCorrect={false}
+                          placeholder="學號、工號或管理員帳號"
+                          placeholderTextColor="#7BA79C"
+                          style={styles.input}
+                          returnKeyType="next"
+                        />
+                      </View>
+
+                      <Text style={styles.label}>密碼</Text>
+                      <View style={styles.inputWrap}>
+                        <Ionicons
+                          name="lock-closed-outline"
+                          size={18}
+                          color="#A9CEC3"
+                        />
+                        <TextInput
+                          value={password}
+                          onChangeText={setPassword}
+                          secureTextEntry={!showPassword}
+                          placeholder="請輸入密碼"
+                          placeholderTextColor="#7BA79C"
+                          style={styles.input}
+                          returnKeyType="done"
+                          onSubmitEditing={login}
+                        />
+                        <Pressable
+                          onPress={() => setShowPassword(!showPassword)}
+                          hitSlop={10}
+                        >
+                          <Ionicons
+                            name={showPassword ? "eye-off-outline" : "eye-outline"}
+                            size={20}
+                            color="#A9CEC3"
+                          />
+                        </Pressable>
+                      </View>
+
+                      <Pressable
+                        style={[styles.loginButton, loading && { opacity: 0.7 }]}
+                        onPress={login}
+                        disabled={loading}
+                        accessibilityRole="button"
+                      >
+                        {loading ? (
+                          <ActivityIndicator color="#16445A" />
+                        ) : (
+                          <>
+                            <Text style={styles.loginText}>登入</Text>
+                            <Ionicons
+                              name="arrow-forward"
+                              size={19}
+                              color="#16445A"
+                            />
+                          </>
+                        )}
+                      </Pressable>
+
+                      <Pressable onPress={() => setIsRegistering(true)} style={{ marginTop: 12 }}>
+                        <Text style={[styles.hint, { color: "#F2C14E", fontSize: 13 }]}>
+                          還沒有帳號？立即註冊
+                        </Text>
+                      </Pressable>
+
+                      <Text style={styles.hint}>
+                        測試帳號：學生 3001 (密碼 123) · 老師 1001 (密碼 321) · 管理員 2001 (密碼 123)
+                      </Text>
+                    </>
+                  )}
                 </LinearGradient>
               </View>
             </TouchableWithoutFeedback>
