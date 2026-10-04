@@ -179,6 +179,14 @@ export default function LoginScreen() {
                           style={styles.input}
                           returnKeyType="next"
                         />
+                        {!regAccount.includes("@") && regAccount.length > 0 && (
+                          <Pressable
+                            onPress={() => setRegAccount(regAccount + "@me.mcu.edu.tw")}
+                            style={styles.appendSuffixBtn}
+                          >
+                            <Text style={styles.appendSuffixText}>補全信箱</Text>
+                          </Pressable>
+                        )}
                       </View>
 
                       <Text style={styles.label}>密碼 (英數混合，最多10碼)</Text>
@@ -252,6 +260,14 @@ export default function LoginScreen() {
                           style={styles.input}
                           returnKeyType="next"
                         />
+                        {!account.includes("@") && account.length > 0 && (
+                          <Pressable
+                            onPress={() => setAccount(account + "@me.mcu.edu.tw")}
+                            style={styles.appendSuffixBtn}
+                          >
+                            <Text style={styles.appendSuffixText}>補全信箱</Text>
+                          </Pressable>
+                        )}
                       </View>
 
                       <Text style={styles.label}>密碼</Text>
@@ -497,5 +513,17 @@ const styles = StyleSheet.create({
     color: "#16445A",
     fontSize: 15,
     fontWeight: "800",
+  },
+  appendSuffixBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    backgroundColor: "rgba(242,193,78,0.15)",
+    borderRadius: 8,
+    marginLeft: 6,
+  },
+  appendSuffixText: {
+    color: "#F2C14E",
+    fontSize: 12,
+    fontWeight: "700",
   },
 });
