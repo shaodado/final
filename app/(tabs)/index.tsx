@@ -468,7 +468,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.08)",
   },
   bubbleLabel: {
-    color: "#173F3B",
+    color: "#F0EEE9", // 淺色（香檳白）
     fontSize: 20,
     fontWeight: "800",
     lineHeight: 27,
@@ -481,7 +481,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 17,
   },
   bubbleSubtitle: {
-    color: "#8dbaed",
+    color: "#E0D8D0", // 淺色（淺大地金）
     fontSize: 10.5,
     lineHeight: 16,
     marginTop: 7,
