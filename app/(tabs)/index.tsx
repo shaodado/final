@@ -264,27 +264,33 @@ export default function HomeScreen() {
             onPress={() => setShowLogoutConfirm(false)}
           />
 
-          <View style={styles.dialog}>
-            <Text style={styles.dialogTitle}>要登出嗎？</Text>
-            <Text style={styles.dialogText}>
+          <LinearGradient
+            colors={[
+              "rgba(239,255,249,0.28)",
+              "rgba(172,224,208,0.1)",
+            ]}
+            style={[styles.dialog, { backgroundColor: "#16445A", borderWidth: 1, borderColor: "rgba(236,255,248,0.35)", borderRadius: 24 }]}
+          >
+            <Text style={[styles.dialogTitle, { color: "#F0FFF9", fontSize: 19, marginBottom: 10 }]}>要登出嗎？</Text>
+            <Text style={[styles.dialogText, { color: "#C3E0D8", marginBottom: 6 }]}>
               登出後需要重新輸入帳號密碼才能進入你的專屬空間。
             </Text>
 
             <View style={styles.dialogActions}>
               <Pressable
                 onPress={() => setShowLogoutConfirm(false)}
-                style={[styles.dialogButton, styles.dialogCancel]}
+                style={[styles.dialogButton, styles.dialogCancel, { backgroundColor: "rgba(8,47,61,0.38)", borderWidth: 1, borderColor: "rgba(236,255,248,0.28)", borderRadius: 14 }]}
               >
-                <Text style={styles.dialogCancelText}>取消</Text>
+                <Text style={[styles.dialogCancelText, { color: "#F0FFF9" }]}>取消</Text>
               </Pressable>
               <Pressable
                 onPress={handleConfirmLogout}
-                style={[styles.dialogButton, styles.dialogConfirm]}
+                style={[styles.dialogButton, styles.dialogConfirm, { backgroundColor: "#F2C14E", borderRadius: 14 }]}
               >
-                <Text style={styles.dialogConfirmText}>登出</Text>
+                <Text style={[styles.dialogConfirmText, { color: "#16445A" }]}>登出</Text>
               </Pressable>
             </View>
-          </View>
+          </LinearGradient>
         </View>
       )}
     </View>
