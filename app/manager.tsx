@@ -130,6 +130,7 @@ export default function ManagerScreen() {
 
     // ================================
     // 登出
+    // 確認視窗不是 Modal，所以不會有「關閉動畫吃掉登出」的問題
     // ================================
     const handleConfirmLogout = (): void => {
         setShowLogoutConfirm(false);
@@ -151,9 +152,12 @@ export default function ManagerScreen() {
         router.push("/manager-evaluations" as never);
     };
 
+    // 先關閉 Modal，等關閉動畫結束再跳頁，避免 iOS 吃掉導覽
     const handleGoManageFromModal = (): void => {
         setShowAnnModal(false);
-        handleAnnouncements();
+        setTimeout(() => {
+            handleAnnouncements();
+        }, 300);
     };
 
     return (
@@ -416,15 +420,15 @@ export default function ManagerScreen() {
             </Modal>
 
             {/* ========================= */}
-            {/* 登出確認 */}
+            {/* 登出確認（覆蓋層，不使用 Modal） */}
             {/* ========================= */}
-            <Modal
-                visible={showLogoutConfirm}
-                transparent
-                animationType="fade"
-                onRequestClose={() => setShowLogoutConfirm(false)}
-            >
-                <View style={styles.dialogBackdrop}>
+            {showLogoutConfirm && (
+                <View style={styles.dialogBackdrop} accessibilityViewIsModal>
+                    <Pressable
+                        style={StyleSheet.absoluteFill}
+                        onPress={() => setShowLogoutConfirm(false)}
+                    />
+
                     <View style={styles.dialog}>
                         <Text style={styles.dialogTitle}>要登出嗎？</Text>
                         <Text style={styles.dialogText}>
@@ -447,7 +451,7 @@ export default function ManagerScreen() {
                         </View>
                     </View>
                 </View>
-            </Modal>
+            )}
         </SafeAreaView>
     );
 }
@@ -854,10 +858,16 @@ const styles = StyleSheet.create({
     },
 
     // ==================================
-    // 登出確認
+    // 登出確認（覆蓋層）
     // ==================================
     dialogBackdrop: {
-        flex: 1,
+        position: "absolute",
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        zIndex: 50,
+        elevation: 50,
         justifyContent: "center",
         paddingHorizontal: 32,
         backgroundColor: "rgba(0,0,0,0.55)",
@@ -899,7 +909,7 @@ const styles = StyleSheet.create({
     dialogCancel: {
         backgroundColor: "rgba(22,68,90,0.10)",
     },
-
+    
     dialogCancelText: {
         fontSize: 15,
         fontWeight: "800",

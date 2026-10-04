@@ -202,6 +202,7 @@ def login(req: LoginRequest):
             "$or": [
                 {"user_id": req.account},
                 {"student_name": req.account},
+                {"email": req.account},
             ]
         }
 
@@ -267,6 +268,46 @@ def login(req: LoginRequest):
         return {
             "success": False,
             "message": "帳號或密碼不正確，請再試一次。",
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/register")
+def register(req: LoginRequest):
+    try:
+        collection = db["STUDENT"]
+
+        # 檢查是否已註冊
+        exists = collection.find_one({"email": req.account})
+        if exists:
+            return {
+                "success": False,
+                "message": "此信箱已經註冊過，請直接登入。",
+            }
+
+        # 取得最大 user_id + 1
+        last_student = collection.find_one(
+            {"user_id": {"$type": "number"}},
+            sort=[("user_id", -1)]
+        )
+        new_id = (last_student["user_id"] if last_student else 3000) + 1
+
+        new_student = {
+            "user_id": new_id,
+            "student_name": req.account.split("@")[0],
+            "email": req.account,
+            "password": req.password,
+            "department_id": "D001",
+            "grade": "大一",
+        }
+
+        collection.insert_one(new_student)
+
+        return {
+            "success": True,
+            "message": "註冊成功",
         }
 
     except Exception as e:
