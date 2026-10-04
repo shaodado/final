@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from database import get_database
+from mcu_crawler import MCUAuthError, MCUCrawlerError, crawl_mcu_transcript
 
 
 # =============================================================
@@ -45,6 +46,15 @@ class AnnouncementCreate(BaseModel):
     course_id: Optional[int] = 101
     teacher_id: Optional[int] = 1001
     type: str = "課堂公告"
+
+
+# -------------------------
+# 學生歷年成績同步請求
+# -------------------------
+class TranscriptSyncRequest(BaseModel):
+    user_id: int
+    mcu_account: str
+    mcu_password: str
 
 
 # =============================================================
@@ -1139,6 +1149,125 @@ def delete_manager_evaluation(eval_key: str):
         return {
             "success": True,
             "message": "課程評價刪除成功",
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# =============================================================
+# 27. 學生歷年成績爬蟲同步（數據不落地原則）
+# =============================================================
+@app.post("/api/student/sync-transcript")
+def sync_student_transcript(req: TranscriptSyncRequest):
+    try:
+        # 1. 執行爬蟲（記憶體處理，不落地）
+        summary, courses = crawl_mcu_transcript(
+            student_id=req.mcu_account,
+            password=req.mcu_password,
+        )
+
+        record_col = db["STUDENT_ACADEMIC_RECORD"]
+        synced_count = 0
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # 2. 將 44 門課程以 Upsert 方式寫入 MongoDB
+        for c in courses:
+            filter_query = {
+                "user_id": req.user_id,
+                "course_id": c["course_id"],
+                "course_name": c["course_name"],
+            }
+            update_doc = {
+                "$set": {
+                    "user_id": req.user_id,
+                    "course_id": c["course_id"],
+                    "course_name": c["course_name"],
+                    "category": c["category"],
+                    "semester_term": c["semester_term"],
+                    "credits": c["credits"],
+                    "earned_credits": c["earned_credits"],
+                    "score": c["score"],
+                    "is_passed": c["is_passed"],
+                    "last_synced_at": now_str,
+                }
+            }
+            record_col.update_one(filter_query, update_doc, upsert=True)
+            synced_count += 1
+
+        # 3. 更新 STUDENT 集合的學分快取
+        if summary:
+            db["STUDENT"].update_one(
+                {"user_id": req.user_id},
+                {
+                    "$set": {
+                        "total_taken_credits": summary.get("total_taken", 0),
+                        "total_grad_credits": summary.get("total_grad_credit", 0),
+                        "unlisted_credits": summary.get("unlisted_credit", 0),
+                        "audit_updated_at": now_str,
+                    }
+                },
+                upsert=False,
+            )
+
+        # 4. 回傳結果（密碼變數隨函式結束立即銷毀）
+        return {
+            "success": True,
+            "message": "歷年成績與學分同步成功！",
+            "synced_count": synced_count,
+            "summary": summary,
+        }
+
+    except MCUAuthError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except MCUCrawlerError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"伺服器內部錯誤: {str(e)}")
+
+
+# =============================================================
+# 28. 學生畢業學分進度條（運算引擎）
+# =============================================================
+@app.get("/api/student/graduation-progress")
+def get_graduation_progress(user_id: int, required_threshold: int = 128):
+    try:
+        # 從 STUDENT_ACADEMIC_RECORD 取出該學生的所有修課紀錄
+        records = list(db["STUDENT_ACADEMIC_RECORD"].find({"user_id": user_id}))
+
+        if not records:
+            return {
+                "success": True,
+                "has_data": False,
+                "message": "尚未同步校務成績，請先進行學分同步。",
+                "progress_percentage": 0.0,
+                "earned_credits": 0,
+                "required_threshold": required_threshold,
+                "categories": {},
+            }
+
+        # 分類統計修得學分
+        categories: Dict[str, float] = {}
+        total_earned = 0.0
+
+        for r in records:
+            if r.get("is_passed", False):
+                credit = float(r.get("earned_credits", r.get("credits", 0.0)))
+                cat = r.get("category", "其他")
+                categories[cat] = categories.get(cat, 0.0) + credit
+                total_earned += credit
+
+        # 計算進度百分比（上限 100%）
+        percentage = min(100.0, round((total_earned / required_threshold) * 100, 1))
+
+        return {
+            "success": True,
+            "has_data": True,
+            "user_id": user_id,
+            "progress_percentage": percentage,
+            "earned_credits": total_earned,
+            "required_threshold": required_threshold,
+            "remaining_credits": max(0.0, required_threshold - total_earned),
+            "category_breakdown": categories,
         }
 
     except Exception as e:

@@ -48,3 +48,4 @@ Python_BackEnd/venv/
 Python_BackEnd/__pycache__/
 Python_BackEnd/.env
 Python_BackEnd/*.pyc
+Python_BackEnd/crawler_test/
