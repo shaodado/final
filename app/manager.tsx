@@ -160,13 +160,14 @@ export default function ManagerScreen() {
     };
 
     return (
-        <SafeAreaView style={styles.safeArea}>
+        <View style={styles.page}>
             <Stack.Screen options={{ headerShown: false }} />
-            <View style={styles.container}>
+            
                 {/* 背景 Glow */}
-                <View style={styles.pinkGlow} />
-                <View style={styles.yellowGlow} />
+                <View style={[styles.glow, styles.glowTop]} />
+                <View style={[styles.glow, styles.glowBottom]} />
 
+                <SafeAreaView style={styles.safeArea}>
                 <ScrollView
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
@@ -231,11 +232,15 @@ export default function ManagerScreen() {
                         >
                             <LinearGradient
                                 colors={[
-                                    "rgba(240,255,249,0.95)",
-                                    "rgba(210,245,235,0.78)",
+                                    "rgba(245,255,252,0.72)",
+                                    "rgba(166,221,207,0.25)",
+                                    "rgba(117,181,169,0.10)",
                                 ]}
+                                locations={[0, 0.55, 1]}
                                 style={styles.mainBubbleGradient}
                             >
+                                <View style={styles.bubbleShine} />
+                                <View style={styles.bubbleGlow} />
                                 <Text style={styles.mainBubbleIcon}>📢</Text>
                                 <Text style={styles.mainBubbleTitle}>管理公告</Text>
                                 <Text style={styles.mainBubbleDescription}>
@@ -260,9 +265,11 @@ export default function ManagerScreen() {
                         >
                             <LinearGradient
                                 colors={[
-                                    "rgba(240,255,249,0.88)",
-                                    "rgba(210,245,235,0.70)",
+                                    "rgba(245,255,252,0.72)",
+                                    "rgba(166,221,207,0.25)",
+                                    "rgba(117,181,169,0.10)",
                                 ]}
+                                locations={[0, 0.55, 1]}
                                 style={styles.smallBubbleGradient}
                             >
                                 <Text style={styles.smallBubbleIcon}>👤</Text>
@@ -284,9 +291,11 @@ export default function ManagerScreen() {
                         >
                             <LinearGradient
                                 colors={[
-                                    "rgba(240,255,249,0.88)",
-                                    "rgba(210,245,235,0.70)",
+                                    "rgba(245,255,252,0.72)",
+                                    "rgba(166,221,207,0.25)",
+                                    "rgba(117,181,169,0.10)",
                                 ]}
+                                locations={[0, 0.55, 1]}
                                 style={styles.smallBubbleGradient}
                             >
                                 <Text style={styles.smallBubbleIcon}>⭐</Text>
@@ -309,7 +318,7 @@ export default function ManagerScreen() {
                         <Text style={styles.footerText}>校園智慧助手</Text>
                     </View>
                 </ScrollView>
-            </View>
+            </SafeAreaView>
 
             {/* ========================= */}
             {/* 校級公告 Modal（鈴鐺） */}
@@ -457,7 +466,7 @@ export default function ManagerScreen() {
           </LinearGradient>
                 </View>
             )}
-        </SafeAreaView>
+        </View>
     );
 }
 
@@ -465,17 +474,8 @@ const styles = StyleSheet.create({
     // ==================================
     // 整體
     // ==================================
-    safeArea: {
-        flex: 1,
-        backgroundColor: "#16445A",
-    },
-
-    container: {
-        flex: 1,
-        backgroundColor: "#16445A",
-        overflow: "hidden",
-    },
-
+    page: { flex: 1, backgroundColor: "#16445A" },
+    safeArea: { flex: 1 },
     scrollContent: {
         flexGrow: 1,
         paddingHorizontal: 24,
@@ -485,27 +485,9 @@ const styles = StyleSheet.create({
     // ==================================
     // Glow
     // ==================================
-    pinkGlow: {
-        position: "absolute",
-        width: 260,
-        height: 260,
-        borderRadius: 130,
-        backgroundColor: "#F28C8C",
-        opacity: 0.18,
-        top: -120,
-        right: -80,
-    },
-
-    yellowGlow: {
-        position: "absolute",
-        width: 280,
-        height: 280,
-        borderRadius: 140,
-        backgroundColor: "#F2C14E",
-        opacity: 0.16,
-        bottom: -100,
-        left: -100,
-    },
+    glow: { position: "absolute", borderRadius: 999 },
+    glowTop: { width: 280, height: 280, top: -135, right: -90, backgroundColor: "#F28C8C", opacity: 0.42 },
+    glowBottom: { width: 320, height: 320, bottom: -135, left: -175, backgroundColor: "#F2C14E", opacity: 0.32 },
 
     // ==================================
     // 標題列
@@ -604,7 +586,30 @@ const styles = StyleSheet.create({
         marginBottom: 28,
     },
 
+
+    bubbleShine: {
+        position: "absolute",
+        width: 105,
+        height: 43,
+        top: 10,
+        left: 23,
+        borderRadius: 100,
+        backgroundColor: "rgba(255,255,255,0.30)",
+        transform: [{ rotate: "-25deg" }],
+    },
+    bubbleGlow: {
+        position: "absolute",
+        width: 75,
+        height: 75,
+        right: -20,
+        bottom: -18,
+        borderRadius: 999,
+        backgroundColor: "rgba(255,255,255,0.08)",
+    },
+    
     mainBubble: {
+        borderWidth: 1.5,
+        borderColor: "rgba(224,255,245,0.72)",
         width: width * 0.62,
         height: width * 0.62,
         maxWidth: 280,
@@ -638,13 +643,13 @@ const styles = StyleSheet.create({
     mainBubbleTitle: {
         fontSize: 24,
         fontWeight: "800",
-        color: "#16445A",
+        color: "#F0EEE9",
         marginBottom: 7,
     },
 
     mainBubbleDescription: {
         fontSize: 14,
-        color: "#426875",
+        color: "#E0D8D0",
         textAlign: "center",
     },
 
@@ -658,6 +663,8 @@ const styles = StyleSheet.create({
     },
 
     smallBubble: {
+        borderWidth: 1.5,
+        borderColor: "rgba(224,255,245,0.72)",
         flex: 1,
         height: 180,
         borderRadius: 40,
@@ -689,7 +696,7 @@ const styles = StyleSheet.create({
     smallBubbleTitle: {
         fontSize: 18,
         fontWeight: "800",
-        color: "#16445A",
+        color: "#F0EEE9",
         marginBottom: 7,
         textAlign: "center",
     },
@@ -698,7 +705,7 @@ const styles = StyleSheet.create({
         fontSize: 12,
         lineHeight: 18,
         textAlign: "center",
-        color: "#426875",
+        color: "#E0D8D0",
     },
 
     // ==================================
@@ -851,13 +858,15 @@ const styles = StyleSheet.create({
         marginTop: 12,
         height: 48,
         borderRadius: 999,
-        backgroundColor: "#F2C14E",
+        backgroundColor: "rgba(255, 255, 255, 0.15)",
+        borderWidth: 1,
+        borderColor: "rgba(255, 255, 255, 0.3)",
         alignItems: "center",
         justifyContent: "center",
     },
 
     manageButtonText: {
-        color: "#16445A",
+        color: "#F0FFF9",
         fontSize: 15,
         fontWeight: "800",
     },
