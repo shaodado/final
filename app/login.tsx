@@ -6,6 +6,7 @@ import {
   Alert,
   Keyboard,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -25,6 +26,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showConsentModal, setShowConsentModal] = useState(true);
 
   const login = async () => {
     const trimmedAccount = account.trim();
@@ -176,6 +178,44 @@ export default function LoginScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
+
+      {/* 權限徵求同意書 Modal */}
+      <Modal visible={showConsentModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>權限徵求同意書</Text>
+            <ScrollView style={{ marginTop: 12, marginBottom: 20 }}>
+              <Text style={styles.modalText}>
+                為了提供完整的選課與學習管理體驗，本應用程式需要您提供「學生資訊系統」以及「Moodle」的帳號與密碼。
+              </Text>
+              <Text style={styles.modalText}>
+                我們將使用這些資訊，反向從校務系統中為您自動獲取課表、成績與作業等相關資料。
+              </Text>
+              <Text style={styles.modalText}>
+                請確認您同意我們使用您的帳號資訊進行資料同步。若您不同意，將無法使用本應用程式的各項功能。
+              </Text>
+              <Text style={[styles.modalText, { color: "#F28C8C", fontWeight: "700", marginTop: 10 }]}>
+                注意：請妥善保管個人密碼，我們承諾僅將資料用於本應用程式之資料同步用途。
+              </Text>
+            </ScrollView>
+
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={[styles.modalBtn, styles.modalBtnDecline]}
+                onPress={() => Alert.alert("提示", "您必須同意才能繼續使用本程式。")}
+              >
+                <Text style={styles.modalBtnDeclineText}>不同意</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.modalBtn, styles.modalBtnAccept]}
+                onPress={() => setShowConsentModal(false)}
+              >
+                <Text style={styles.modalBtnAcceptText}>我同意</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -264,4 +304,56 @@ const styles = StyleSheet.create({
   },
   loginText: { color: "#16445A", fontSize: 15, fontWeight: "800" },
   hint: { color: "#A9CEC3", fontSize: 11, textAlign: "center", marginTop: 16 },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  modalContent: {
+    backgroundColor: "#123A4E",
+    borderRadius: 24,
+    padding: 24,
+    maxHeight: "80%",
+  },
+  modalTitle: {
+    color: "#F0FFF9",
+    fontSize: 20,
+    fontWeight: "800",
+    textAlign: "center",
+    marginBottom: 10,
+  },
+  modalText: {
+    color: "#C3E0D8",
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 8,
+  },
+  modalButtons: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  modalBtnDecline: {
+    backgroundColor: "rgba(239,255,249,0.1)",
+  },
+  modalBtnAccept: {
+    backgroundColor: "#F2C14E",
+  },
+  modalBtnDeclineText: {
+    color: "#A9CEC3",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  modalBtnAcceptText: {
+    color: "#16445A",
+    fontSize: 15,
+    fontWeight: "800",
+  },
 });

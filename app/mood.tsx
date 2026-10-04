@@ -246,6 +246,29 @@ export default function MoodScreen() {
     if (nextPanel === "reviews") {
       fetchFilteredCourses(filterDept, filterGrade, filterCategory);
     }
+
+    // 自動捲動到展開的面板，避免資訊被截斷
+    setTimeout(() => {
+      let yOffset = 0;
+      switch (nextPanel) {
+        case "rate":
+          yOffset = 165;
+          break;
+        case "quiz":
+          yOffset = 250;
+          break;
+        case "reviews":
+          yOffset = 335;
+          break;
+        case "details":
+          yOffset = 420;
+          break;
+        case "reminder":
+          yOffset = 505;
+          break;
+      }
+      scrollViewRef.current?.scrollTo({ y: yOffset, animated: true });
+    }, 150);
   };
 
   const handleSubmitRating = async (): Promise<void> => {
@@ -633,36 +656,43 @@ export default function MoodScreen() {
                         沒有符合此條件的課程。
                       </Text>
                     ) : (
-                      <View style={{ gap: 10 }}>
+                      <View style={{ flex: 1 }}>
                         <Text style={styles.courseListHint}>
                           點擊課程即可查看詳細評價：
                         </Text>
-                        {searchedCourses.map((course) => (
-                          <Pressable
-                            key={course.course_id}
-                            style={styles.courseSelectCard}
-                            onPress={() => handleOpenCourseReviews(course)}
-                          >
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.courseCardName}>
-                                {course.course_name}
-                              </Text>
-                              <Text style={styles.courseCardMeta}>
-                                {course.teacher || "授課教師"} ·{" "}
-                                {course.department || "系所"} ·{" "}
-                                {course.grade || "年級"} ·{" "}
-                                {course.category || "修別"}
-                              </Text>
-                            </View>
-                            <View style={styles.viewBadge}>
-                              <Ionicons
-                                name="chevron-forward"
-                                size={15}
-                                color="#ffffff"
-                              />
-                            </View>
-                          </Pressable>
-                        ))}
+                        <ScrollView
+                          style={{ maxHeight: 280 }}
+                          contentContainerStyle={{ gap: 10, paddingBottom: 10 }}
+                          nestedScrollEnabled={true}
+                          showsVerticalScrollIndicator={true}
+                        >
+                          {searchedCourses.map((course) => (
+                            <Pressable
+                              key={course.course_id}
+                              style={styles.courseSelectCard}
+                              onPress={() => handleOpenCourseReviews(course)}
+                            >
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.courseCardName}>
+                                  {course.course_name}
+                                </Text>
+                                <Text style={styles.courseCardMeta}>
+                                  {course.teacher || "授課教師"} ·{" "}
+                                  {course.department || "系所"} ·{" "}
+                                  {course.grade || "年級"} ·{" "}
+                                  {course.category || "修別"}
+                                </Text>
+                              </View>
+                              <View style={styles.viewBadge}>
+                                <Ionicons
+                                  name="chevron-forward"
+                                  size={15}
+                                  color="#ffffff"
+                                />
+                              </View>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
                       </View>
                     )}
                   </View>
