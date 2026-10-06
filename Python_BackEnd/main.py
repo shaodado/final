@@ -296,12 +296,18 @@ def register(req: LoginRequest):
                 "message": "此信箱已經註冊過，請直接登入。",
             }
 
-        # 取得最大 user_id + 1
-        last_student = collection.find_one(
-            {"user_id": {"$type": "number"}},
-            sort=[("user_id", -1)]
-        )
-        new_id = (last_student["user_id"] if last_student else 3000) + 1
+        email_prefix = req.account.split("@")[0]
+        
+        # 嘗試從信箱前綴擷取前 8 碼數字作為學號 (user_id)
+        if req.account.endswith("@me.mcu.edu.tw") and email_prefix[:8].isdigit():
+            new_id = int(email_prefix[:8])
+        else:
+            # 取得最大 user_id + 1 作為備案
+            last_student = collection.find_one(
+                {"user_id": {"$type": "number"}},
+                sort=[("user_id", -1)]
+            )
+            new_id = (last_student["user_id"] if last_student else 3000) + 1
 
         new_student = {
             "user_id": new_id,
