@@ -344,12 +344,13 @@ export default function ManagerEvaluationsScreen() {
     // 畫面
     // ------------------------------
     return (
-        <SafeAreaView style={styles.safeArea}>
+        <View style={styles.page}>
             <Stack.Screen options={{ headerShown: false }} />
-            <View style={styles.container}>
-                <View style={styles.pinkGlow} />
-                <View style={styles.yellowGlow} />
+            
+            <View style={styles.pinkGlow} />
+            <View style={styles.yellowGlow} />
 
+            <SafeAreaView style={styles.safeArea}>
                 <ScrollView
                     contentContainerStyle={styles.scrollContent}
                     showsVerticalScrollIndicator={false}
@@ -590,7 +591,7 @@ export default function ManagerEvaluationsScreen() {
                         </View>
                     </View>
                 )}
-            </View>
+            </SafeAreaView>
 
             {/* ========================= */}
             {/* 審核 / 備註 Modal */}
@@ -729,14 +730,14 @@ export default function ManagerEvaluationsScreen() {
                     </View>
                 </View>
             </Modal>
-        </SafeAreaView>
+        </View>
     );
 }
 
 const styles = StyleSheet.create({
     // 整體
-    safeArea: { flex: 1, backgroundColor: "#16445A" },
-    container: { flex: 1, backgroundColor: "#16445A", overflow: "hidden" },
+    page: { flex: 1, backgroundColor: "#16445A" },
+    safeArea: { flex: 1 },
     scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 48 },
 
     // Glow
