@@ -74,9 +74,9 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 const ROLE_COLORS: Record<string, { bg: string; text: string }> = {
-    student: { bg: "rgba(66,104,117,0.16)", text: "#426875" },
-    teacher: { bg: "rgba(242,193,78,0.35)", text: "#7A5A0B" },
-    Manager: { bg: "rgba(242,140,140,0.30)", text: "#9A3B3B" },
+    student: { bg: "rgba(154,216,237,0.2)", text: "#9AD8ED" },
+    teacher: { bg: "rgba(242,193,78,0.2)", text: "#F2C14E" },
+    Manager: { bg: "rgba(242,140,140,0.2)", text: "#F28C8C" },
 };
 
 // ================================
@@ -798,15 +798,12 @@ const styles = StyleSheet.create({
 
     // 帳號卡片
     card: {
-        backgroundColor: "rgba(240,255,249,0.92)",
-        borderRadius: 32,
+        backgroundColor: "rgba(239,255,249,0.12)",
+        borderColor: "rgba(236,255,248,0.35)",
+        borderWidth: 1,
+        borderRadius: 24,
         padding: 18,
         marginBottom: 14,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.18,
-        shadowRadius: 15,
-        elevation: 6,
     },
     cardMain: { flexDirection: "row", alignItems: "center", gap: 14, marginBottom: 14 },
     avatar: {
@@ -819,12 +816,12 @@ const styles = StyleSheet.create({
     avatarText: { fontSize: 22, fontWeight: "800" },
     cardInfo: { flex: 1 },
     nameRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-    cardName: { flexShrink: 1, fontSize: 18, fontWeight: "800", color: "#16445A" },
+    cardName: { flexShrink: 1, fontSize: 18, fontWeight: "800", color: "#F0FFF9" },
     selfTag: {
         fontSize: 11,
         fontWeight: "800",
         color: "#16445A",
-        backgroundColor: "rgba(242,193,78,0.5)",
+        backgroundColor: "rgba(242,193,78,0.8)",
         paddingHorizontal: 8,
         paddingVertical: 2,
         borderRadius: 999,
@@ -833,8 +830,8 @@ const styles = StyleSheet.create({
     badgeRow: { flexDirection: "row", alignItems: "center", gap: 10, marginTop: 6 },
     badge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 999 },
     badgeText: { fontSize: 12, fontWeight: "700" },
-    idText: { fontSize: 13, color: "#6F8F9A", fontWeight: "600" },
-    metaText: { fontSize: 12, color: "#6F8F9A", marginTop: 6 },
+    idText: { fontSize: 13, color: "rgba(240,255,249,0.6)", fontWeight: "600" },
+    metaText: { fontSize: 12, color: "rgba(240,255,249,0.5)", marginTop: 6 },
 
     actionRow: { flexDirection: "row", gap: 10 },
     actionButton: {
@@ -842,11 +839,11 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         borderRadius: 999,
         alignItems: "center",
-        backgroundColor: "rgba(22,68,90,0.10)",
+        backgroundColor: "rgba(240,255,249,0.15)",
     },
-    actionText: { fontSize: 14, fontWeight: "800", color: "#16445A" },
-    actionDanger: { backgroundColor: "rgba(214,69,69,0.12)" },
-    actionDangerText: { color: "#C23B3B" },
+    actionText: { fontSize: 14, fontWeight: "800", color: "#F0FFF9" },
+    actionDanger: { backgroundColor: "rgba(242,140,140,0.18)" },
+    actionDangerText: { color: "#F28C8C" },
     actionDisabled: { opacity: 0.35 },
 
     // 按壓效果

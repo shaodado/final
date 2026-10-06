@@ -69,11 +69,11 @@ const ALL = "全部";
 const DEFAULT_STATUSES = ["已審核", "待審核", "已隱藏"];
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
-    已審核: { bg: "rgba(66,160,120,0.20)", text: "#1F6B4C" },
-    待審核: { bg: "rgba(242,193,78,0.35)", text: "#7A5A0B" },
-    已隱藏: { bg: "rgba(242,140,140,0.30)", text: "#9A3B3B" },
+    已審核: { bg: "rgba(66,160,120,0.30)", text: "#A7F3D0" },
+    待審核: { bg: "rgba(242,193,78,0.30)", text: "#F2C14E" },
+    已隱藏: { bg: "rgba(242,140,140,0.30)", text: "#F28C8C" },
 };
-const FALLBACK_STATUS_COLOR = { bg: "rgba(66,104,117,0.16)", text: "#426875" };
+const FALLBACK_STATUS_COLOR = { bg: "rgba(154,216,237,0.2)", text: "#9AD8ED" };
 
 // ================================
 // API 函式
@@ -817,15 +817,12 @@ const styles = StyleSheet.create({
 
     // 評價卡片
     card: {
-        backgroundColor: "rgba(240,255,249,0.92)",
-        borderRadius: 32,
+        backgroundColor: "rgba(239,255,249,0.12)",
+        borderColor: "rgba(236,255,248,0.35)",
+        borderWidth: 1,
+        borderRadius: 24,
         padding: 20,
         marginBottom: 14,
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.18,
-        shadowRadius: 15,
-        elevation: 6,
     },
     cardTop: {
         flexDirection: "row",
@@ -836,9 +833,9 @@ const styles = StyleSheet.create({
     cardTopLeft: { flexDirection: "row", alignItems: "center", gap: 8, flexShrink: 1, flexWrap: "wrap" },
     badge: { paddingHorizontal: 12, paddingVertical: 5, borderRadius: 999 },
     badgeText: { fontSize: 12, fontWeight: "700" },
-    courseBadge: { backgroundColor: "rgba(66,104,117,0.16)" },
-    courseBadgeText: { fontSize: 12, fontWeight: "700", color: "#426875" },
-    idText: { fontSize: 13, color: "#6F8F9A", fontWeight: "700" },
+    courseBadge: { backgroundColor: "rgba(154,216,237,0.2)" },
+    courseBadgeText: { fontSize: 12, fontWeight: "700", color: "#9AD8ED" },
+    idText: { fontSize: 13, color: "rgba(240,255,249,0.6)", fontWeight: "700" },
 
     scoreRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
     scoreBox: {
@@ -846,24 +843,24 @@ const styles = StyleSheet.create({
         alignItems: "center",
         paddingVertical: 10,
         borderRadius: 18,
-        backgroundColor: "rgba(22,68,90,0.07)",
+        backgroundColor: "rgba(255,255,255,0.07)",
     },
-    scoreValue: { fontSize: 20, fontWeight: "800", color: "#16445A" },
-    scoreLabel: { fontSize: 12, color: "#6F8F9A", marginTop: 2 },
+    scoreValue: { fontSize: 20, fontWeight: "800", color: "#F0FFF9" },
+    scoreLabel: { fontSize: 12, color: "rgba(240,255,249,0.6)", marginTop: 2 },
 
-    comment: { fontSize: 14, lineHeight: 22, color: "#2F5663" },
-    commentEmpty: { fontSize: 14, color: "#8AA6AF" },
-    expandText: { fontSize: 13, fontWeight: "800", color: "#16445A", marginTop: 6 },
-    metaText: { fontSize: 12, color: "#6F8F9A", marginTop: 10 },
+    comment: { fontSize: 14, lineHeight: 22, color: "rgba(240,255,249,0.8)" },
+    commentEmpty: { fontSize: 14, color: "rgba(240,255,249,0.4)" },
+    expandText: { fontSize: 13, fontWeight: "800", color: "#F2C14E", marginTop: 6 },
+    metaText: { fontSize: 12, color: "rgba(240,255,249,0.5)", marginTop: 10 },
 
     noteBox: {
         marginTop: 12,
         padding: 12,
         borderRadius: 16,
-        backgroundColor: "rgba(242,193,78,0.22)",
+        backgroundColor: "rgba(242,193,78,0.15)",
     },
-    noteLabel: { fontSize: 12, fontWeight: "800", color: "#7A5A0B", marginBottom: 4 },
-    noteText: { fontSize: 13, lineHeight: 19, color: "#5C4509" },
+    noteLabel: { fontSize: 12, fontWeight: "800", color: "#F2C14E", marginBottom: 4 },
+    noteText: { fontSize: 13, lineHeight: 19, color: "rgba(240,255,249,0.8)" },
 
     actionRow: { flexDirection: "row", gap: 10, marginTop: 16 },
     actionButton: {
@@ -871,11 +868,11 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
         borderRadius: 999,
         alignItems: "center",
-        backgroundColor: "rgba(22,68,90,0.10)",
+        backgroundColor: "rgba(240,255,249,0.15)",
     },
-    actionText: { fontSize: 14, fontWeight: "800", color: "#16445A" },
-    actionDanger: { backgroundColor: "rgba(214,69,69,0.12)" },
-    actionDangerText: { color: "#C23B3B" },
+    actionText: { fontSize: 14, fontWeight: "800", color: "#F0FFF9" },
+    actionDanger: { backgroundColor: "rgba(242,140,140,0.18)" },
+    actionDangerText: { color: "#F28C8C" },
 
     // 按壓效果
     pressed: { opacity: 0.75, transform: [{ scale: 0.97 }] },
