@@ -1,5 +1,6 @@
 // app/courses.tsx
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -47,29 +48,6 @@ type CompetencyThreshold = {
   status: "passed" | "pending";
   requirement: string;
 };
-
-const defaultCompetencies: CompetencyThreshold[] = [
-  {
-    name: "英語能力檢定",
-    status: "passed",
-    requirement: "TOEIC 550 分或同等檢定通過",
-  },
-  {
-    name: "資訊能力檢定",
-    status: "passed",
-    requirement: "程式設計基礎與系專業檢定",
-  },
-  {
-    name: "運動能力檢定",
-    status: "passed",
-    requirement: "大一至大三體育必修修習通過",
-  },
-  {
-    name: "專業核心能力",
-    status: "pending",
-    requirement: "大四專題研究（二）完成發表",
-  },
-];
 
 const CATEGORY_STYLES: {
   [key: string]: {
@@ -302,6 +280,7 @@ export default function CoursesScreen() {
   const [completionPercent, setCompletionPercent] = useState<number>(0);
   const [requirements, setRequirements] = useState<Requirement[]>([]);
   const [selectedName, setSelectedName] = useState<string | null>(null);
+  const [competencies, setCompetencies] = useState<CompetencyThreshold[]>([]);
 
   // 同步彈窗狀態
   const [modalVisible, setModalVisible] = useState<boolean>(false);
@@ -335,6 +314,17 @@ export default function CoursesScreen() {
           setRemainingCredits(json.remaining_credits);
           setCompletionPercent(json.progress_percentage);
 
+          // 🌟 直接採用學校官方爬下來的門檻清單
+          if (json.competencies && Array.isArray(json.competencies)) {
+            // 🌟 過濾掉非必要門檻（服務學習）
+            const validCompetencies = json.competencies.filter(
+              (item: CompetencyThreshold) => !item.name.includes("服務學習")
+            );
+            setCompetencies(validCompetencies);
+          } else {
+            setCompetencies([]);
+          }
+
           const coursesByCategory = json.courses_by_category || {};
           const items: Requirement[] = Object.entries(
             json.category_breakdown || {}
@@ -355,6 +345,7 @@ export default function CoursesScreen() {
           });
           setRequirements(items);
         } else {
+          // 只有後端明確告知 has_data 為 false 時，才呈現引導同步卡片
           setHasData(false);
         }
       } catch (error) {
@@ -368,16 +359,41 @@ export default function CoursesScreen() {
     [currentUserId]
   );
 
+  // 🌟 從 AsyncStorage 讀取當前登入者學號並抓取資料
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchProgress();
-    }, 0);
-    return () => clearTimeout(timer);
+    const loadCurrentUserAndFetch = async () => {
+      try {
+        // 1. 優先從手機本機快取讀取 login.tsx 存進來的學號
+        const storedId = await AsyncStorage.getItem("current_user_id");
+
+        // 2. 判斷使用哪個學號：快取優先 -> .env 備用 -> 0
+        const activeId = storedId
+          ? Number(storedId)
+          : DEFAULT_STUDENT_ID
+            ? Number(DEFAULT_STUDENT_ID)
+            : 0;
+
+        if (activeId > 0) {
+          setCurrentUserId(activeId);
+          setMcuAccount(String(activeId)); // 同步彈窗自動預填此學號
+          fetchProgress(activeId);
+        } else {
+          setLoading(false);
+          setHasData(false);
+        }
+      } catch (error) {
+        console.warn("讀取本機登入學號失敗:", error);
+        setLoading(false);
+        setHasData(false);
+      }
+    };
+
+    loadCurrentUserAndFetch();
   }, [fetchProgress]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchProgress();
+    fetchProgress(currentUserId);
   };
 
   const handleSelectRequirement = (name: string): void => {
@@ -418,10 +434,18 @@ export default function CoursesScreen() {
         setMcuPassword("");
         fetchProgress(targetUserId);
       } else {
-        Alert.alert(
-          "同步失敗",
-          json.detail || "學校帳號密碼錯誤或伺服器連線異常。"
-        );
+        // 🌟 防禦寫法：確保傳入 Alert 的內容一定是字串
+        let errorMsg = "學校帳號密碼錯誤或伺服器連線異常。";
+        if (typeof json.detail === "string") {
+          errorMsg = json.detail;
+        } else if (Array.isArray(json.detail)) {
+          // 將 FastAPI 422 驗證錯誤格式化為易讀字串
+          errorMsg = json.detail
+            .map((e: any) => `${e.loc?.slice(-1)[0]}: ${e.msg}`)
+            .join("\n");
+        }
+
+        Alert.alert("同步失敗", errorMsg);
       }
     } catch {
       Alert.alert(
@@ -570,36 +594,67 @@ export default function CoursesScreen() {
                   </Text>
                 </View>
 
-                {defaultCompetencies.map((item) => {
-                  const isPassed = item.status === "passed";
-                  return (
-                    <View key={item.name} style={styles.competencyCard}>
-                      <View style={styles.competencyIcon}>
-                        <Ionicons
-                          name={isPassed ? "checkmark-circle" : "time-outline"}
-                          size={24}
-                          color={isPassed ? "#9AD8ED" : "#F6C98A"}
-                        />
-                      </View>
-                      <View style={styles.competencyContent}>
-                        <View style={styles.competencyTitleRow}>
-                          <Text style={styles.competencyName}>{item.name}</Text>
-                          <Text
-                            style={[
-                              styles.competencyStatus,
-                              { color: isPassed ? "#9AD8ED" : "#F6C98A" },
-                            ]}
-                          >
-                            {isPassed ? "已通過" : "待完成"}
+                {competencies && competencies.length > 0 ? (
+                  competencies.map((item, idx) => {
+                    const isPassed = item.status === "passed";
+                    return (
+                      /* 🌟 加入 idx 確保 key 絕對唯一，杜絕 React 警告 */
+                      <View
+                        key={`${item.name}-${idx}`}
+                        style={styles.competencyCard}
+                      >
+                        <View style={styles.competencyIcon}>
+                          <Ionicons
+                            name={
+                              isPassed ? "checkmark-circle" : "time-outline"
+                            }
+                            size={24}
+                            color={isPassed ? "#9AD8ED" : "#F6C98A"}
+                          />
+                        </View>
+
+                        <View style={styles.competencyContent}>
+                          <View style={styles.competencyTitleRow}>
+                            <Text style={styles.competencyName}>
+                              {item.name}
+                            </Text>
+                            <Text
+                              style={[
+                                styles.competencyStatus,
+                                { color: isPassed ? "#9AD8ED" : "#F6C98A" },
+                              ]}
+                            >
+                              {isPassed ? "已通過" : "未通過"}
+                            </Text>
+                          </View>
+
+                          <Text style={styles.competencyRequirement}>
+                            {item.requirement}
                           </Text>
                         </View>
-                        <Text style={styles.competencyRequirement}>
-                          {item.requirement}
-                        </Text>
                       </View>
+                    );
+                  })
+                ) : (
+                  /* 🌟 空狀態防呆提示卡片 */
+                  <View style={styles.competencyCard}>
+                    <View style={styles.competencyIcon}>
+                      <Ionicons
+                        name="refresh-outline"
+                        size={24}
+                        color="#F6C98A"
+                      />
                     </View>
-                  );
-                })}
+                    <View style={styles.competencyContent}>
+                      <Text style={styles.competencyName}>
+                        尚未取得官方檢定資料
+                      </Text>
+                      <Text style={styles.competencyRequirement}>
+                        請點擊右上角「同步」按鈕更新校務資格審查
+                      </Text>
+                    </View>
+                  </View>
+                )}
               </>
             )}
           </ScrollView>

@@ -17,10 +17,101 @@ class MCUCrawlerError(Exception):
     pass
 
 
-def crawl_mcu_transcript(student_id: str, password: str) -> Tuple[Dict[str, int], List[Dict[str, Any]]]:
+def parse_student_info(soup: BeautifulSoup) -> Dict[str, Any]:
     """
-    登入銘傳校務系統並抓取「自我畢業審查」歷年修課明細與學分統計。
-    所有帳密僅在記憶體中使用，不進行任何持久化儲存。
+    解析自我畢業審查頁面頂部的學生基本資訊（姓名、年級、系級）
+    """
+    text = soup.get_text()
+    info: Dict[str, Any] = {
+        "student_name": None,
+        "grade": "大四",  # 預設大四
+        "department": None,
+    }
+
+    # 1. 解析真實姓名（頁面常見格式：姓名：王大明 或 姓名:王大明）
+    name_match = re.search(r"姓名\s*[:：]\s*([^\s\r\n\t <]+)", text)
+    if name_match:
+        candidate = name_match.group(1).strip()
+        # 排除誤抓到後續標題文字
+        if candidate and not any(kw in candidate for kw in ["學號", "系級", "班級", "身分證", "資訊"]):
+            info["student_name"] = candidate
+
+    # 2. 解析系級（頁面常見格式：系級：資訊管理學系四年級甲班）
+    dept_match = re.search(r"(?:系級|系所|科系)\s*[:：]\s*([^\s\r\n\t <]+)", text)
+    if dept_match:
+        info["department"] = dept_match.group(1).strip()
+
+    # 3. 解析真實年級
+    if any(kw in text for kw in ["四年級", "4年級", "大四"]):
+        info["grade"] = "大四"
+    elif any(kw in text for kw in ["三年級", "3年級", "大三"]):
+        info["grade"] = "大三"
+    elif any(kw in text for kw in ["二年級", "2年級", "大二"]):
+        info["grade"] = "大二"
+    elif any(kw in text for kw in ["一年級", "1年級", "大一"]):
+        info["grade"] = "大一"
+    elif "延修" in text:
+        info["grade"] = "延修生"
+
+    return info
+
+def parse_graduation_competencies(soup: BeautifulSoup) -> List[Dict[str, Any]]:
+    """
+    精準解析學校「畢業資格檢定」表格（排除服務學習等非必要項目）
+    """
+    competencies = []
+
+    for table in soup.find_all("table"):
+        if table.find("table") is not None:
+            continue
+
+        text = table.get_text()
+        if "檢定結果" in text and "項目" in text:
+            for tr in table.find_all("tr"):
+                cells = [td.get_text(strip=True) for td in tr.find_all(["td", "th"])]
+
+                if not cells or "項目" in cells or "畢業資格檢定" in cells:
+                    continue
+
+                # 🌟 左欄檢查：排除含有「服務學習」的項目
+                if len(cells) >= 2:
+                    name1, res1 = cells[0], cells[1]
+                    if res1 in ["通過", "未通過"] and name1 and ("服務學習" not in name1):
+                        competencies.append({
+                            "name": name1,
+                            "status": "passed" if res1 == "通過" else "pending",
+                            "requirement": f"學校審查狀態：{res1}",
+                        })
+
+                # 🌟 右欄檢查：排除含有「服務學習」的項目
+                if len(cells) >= 4:
+                    name2, res2 = cells[2], cells[3]
+                    if res2 in ["通過", "未通過"] and name2 and ("服務學習" not in name2):
+                        competencies.append({
+                            "name": name2,
+                            "status": "passed" if res2 == "通過" else "pending",
+                            "requirement": f"學校審查狀態：{res2}",
+                        })
+
+            if competencies:
+                break
+
+    unique_competencies = []
+    seen_names = set()
+    for c in competencies:
+        if c["name"] not in seen_names:
+            seen_names.add(c["name"])
+            unique_competencies.append(c)
+
+    return unique_competencies
+
+
+def crawl_mcu_transcript(
+    student_id: str, password: str
+) -> Tuple[Dict[str, int], List[Dict[str, Any]], Dict[str, Any]]:
+    """
+    登入銘傳校務系統並抓取「自我畢業審查」歷年修課明細、學分統計與學生資訊。
+    回傳: (summary, unique_courses, student_info)
     """
     session = requests.Session()
     session.headers.update({
@@ -85,6 +176,9 @@ def crawl_mcu_transcript(student_id: str, password: str) -> Tuple[Dict[str, int]
     # 4. 剖析 HTML 資料
     soup = BeautifulSoup(html, "html.parser")
 
+    # 4.0 解析學生基本資料（年級、姓名、系所）
+    student_info = parse_student_info(soup)
+
     # 4.1 學分總覽
     summary: Dict[str, int] = {}
     for table in soup.find_all("table"):
@@ -103,7 +197,7 @@ def crawl_mcu_transcript(student_id: str, password: str) -> Tuple[Dict[str, int]
             if summary:
                 break
 
-    # 4.2 修課明細（加強版：支援 rowspan 與通識向度繼承）
+    # 4.2 修課明細（支援 rowspan 與通識向度繼承）
     raw_courses = []
     current_category = "通識課程"
 
@@ -163,6 +257,7 @@ def crawl_mcu_transcript(student_id: str, password: str) -> Tuple[Dict[str, int]
                     "is_passed": is_passed,
                     "earned_credits": credit if is_passed else 0.0,
                 })
+
     # 去除巢狀表格重複列
     unique_courses = []
     seen = set()
@@ -172,4 +267,11 @@ def crawl_mcu_transcript(student_id: str, password: str) -> Tuple[Dict[str, int]
             seen.add(key)
             unique_courses.append(c)
 
-    return summary, unique_courses
+    # 4.0 解析基本資料與畢業資格檢定
+    student_info = parse_student_info(soup)
+    competencies = parse_graduation_competencies(soup)  # 🌟 新增這行
+
+    # ... 中間抓取 summary 與 unique_courses 不變 ...
+
+    # 🌟 回傳 4 個物件：summary, courses, student_info, competencies
+    return summary, unique_courses, student_info, competencies

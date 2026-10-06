@@ -107,6 +107,14 @@ class ManagerEvaluationUpdate(BaseModel):
     manager_update_id: Optional[int] = None
     manager_update: Optional[str] = None
 
+# -------------------------
+# 同步學生歷年成績請求
+# -------------------------
+class SyncTranscriptRequest(BaseModel):
+    user_id: int
+    mcu_account: str
+    mcu_password: str
+
 
 # =============================================================
 # 2. 小工具
@@ -297,7 +305,7 @@ def register(req: LoginRequest):
             }
 
         email_prefix = req.account.split("@")[0]
-        
+
         # 嘗試從信箱前綴擷取前 8 碼數字作為學號 (user_id)
         if req.account.endswith("@me.mcu.edu.tw") and email_prefix[:8].isdigit():
             new_id = int(email_prefix[:8])
@@ -1277,67 +1285,58 @@ def delete_manager_evaluation(eval_key: str):
 # 27. 學生歷年成績爬蟲同步（數據不落地原則）
 # =============================================================
 @app.post("/api/student/sync-transcript")
-def sync_student_transcript(req: TranscriptSyncRequest):
+def sync_transcript(req: SyncTranscriptRequest):
     try:
-        # 1. 執行爬蟲（記憶體處理，不落地）
-        summary, courses = crawl_mcu_transcript(
-            student_id=req.mcu_account,
-            password=req.mcu_password,
+        # 1. 呼叫爬蟲（改為解構 3 個回傳值）
+        summary, courses, student_info, competencies = crawl_mcu_transcript(
+            req.mcu_account, req.mcu_password
         )
 
-        record_col = db["STUDENT_ACADEMIC_RECORD"]
-        synced_count = 0
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # 2. 將 44 門課程以 Upsert 方式寫入 MongoDB
+        # 2. 更新修課紀錄 (STUDENT_ACADEMIC_RECORD)
         for c in courses:
-            filter_query = {
-                "user_id": req.user_id,
-                "course_id": c["course_id"],
-                "course_name": c["course_name"],
-            }
-            update_doc = {
-                "$set": {
-                    "user_id": req.user_id,
-                    "course_id": c["course_id"],
-                    "course_name": c["course_name"],
-                    "category": c["category"],
-                    "semester_term": c["semester_term"],
-                    "credits": c["credits"],
-                    "earned_credits": c["earned_credits"],
-                    "score": c["score"],
-                    "is_passed": c["is_passed"],
-                    "last_synced_at": now_str,
-                }
-            }
-            record_col.update_one(filter_query, update_doc, upsert=True)
-            synced_count += 1
-
-        # 3. 更新 STUDENT 集合的學分快取
-        if summary:
-            db["STUDENT"].update_one(
-                {"user_id": req.user_id},
+            db["STUDENT_ACADEMIC_RECORD"].update_one(
                 {
-                    "$set": {
-                        "total_taken_credits": summary.get("total_taken", 0),
-                        "total_grad_credits": summary.get("total_grad_credit", 0),
-                        "unlisted_credits": summary.get("unlisted_credit", 0),
-                        "audit_updated_at": now_str,
-                    }
+                    "user_id": req.user_id,
+                    "course_name": c["course_name"],
+                    "semester_term": c["semester_term"],
                 },
+                {"$set": {**c, "user_id": req.user_id, "updated_at": now_str}},
                 upsert=True,
             )
 
-        # 4. 回傳結果（密碼變數隨函式結束立即銷毀）
+        # 3. 更新 STUDENT 集合
+        update_fields = {
+            "total_taken_credits": summary.get("total_taken", 0),
+            "total_grad_credits": summary.get("total_grad_credit", 0),
+            "unlisted_credits": summary.get("unlisted_credit", 0),
+            "audit_updated_at": now_str,
+            "competencies": competencies,  # 🌟 將抓到的檢定表存入資料庫
+        }
+
+        if student_info.get("grade"):
+            update_fields["grade"] = student_info["grade"]
+        if student_info.get("student_name"):
+            update_fields["student_name"] = student_info["student_name"]
+
+        db["STUDENT"].update_one(
+            {"user_id": req.user_id},
+            {"$set": update_fields},
+            upsert=True,
+        )
+
         return {
             "success": True,
             "message": "歷年成績與學分同步成功！",
-            "synced_count": synced_count,
+            "synced_count": len(courses),
+            "student_info": student_info,
+            "competencies": competencies,
             "summary": summary,
         }
 
     except MCUAuthError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=401, detail=str(e))
     except MCUCrawlerError as e:
         raise HTTPException(status_code=502, detail=str(e))
     except Exception as e:
@@ -1353,22 +1352,33 @@ def get_graduation_progress(user_id: int, required_threshold: int = 128):
     try:
         student_info = db["STUDENT"].find_one({"user_id": user_id})
         records = list(db["STUDENT_ACADEMIC_RECORD"].find({"user_id": user_id}))
+        stored_competencies = (
+            student_info.get("competencies", []) if student_info else []
+        )
 
-        if not records and not student_info:
+        # 🌟 精準判定：只要 student_info 含有 audit_updated_at，或資料庫有修課紀錄，就代表「已同步過」
+        has_synced = bool(
+            student_info and student_info.get("audit_updated_at")
+        ) or bool(records)
+
+        # 1. 尚未同步過的使用者：回傳 has_data: False
+        if not has_synced:
             return {
                 "success": True,
                 "has_data": False,
                 "message": "尚未同步校務成績，請先進行學分同步。",
                 "progress_percentage": 0.0,
-                "earned_credits": 0,
+                "earned_credits": 0.0,
                 "required_threshold": required_threshold,
                 "remaining_credits": required_threshold,
                 "category_breakdown": {},
                 "courses_by_category": {},
+                "competencies": [],
             }
 
-        categories: Dict[str, float] = {}
-        courses_by_category: Dict[str, list] = {}
+        # 2. 已同步過的使用者：統計各向度學分
+        categories: dict[str, float] = {}
+        courses_by_category: dict[str, list] = {}
         calc_total = 0.0
 
         for r in records:
@@ -1380,7 +1390,6 @@ def get_graduation_progress(user_id: int, required_threshold: int = 128):
                 categories[cat] = round(categories.get(cat, 0.0) + credit, 1)
                 calc_total += credit
 
-            # 歸納該向度下的修課清單
             if cat not in courses_by_category:
                 courses_by_category[cat] = []
             courses_by_category[cat].append({
@@ -1390,10 +1399,19 @@ def get_graduation_progress(user_id: int, required_threshold: int = 128):
                 "is_passed": is_passed,
             })
 
-        official_credits = student_info.get("total_grad_credits") if student_info else None
-        final_earned = float(official_credits) if official_credits is not None and official_credits > 0 else calc_total
-        percentage = min(100.0, round((final_earned / required_threshold) * 100, 1))
+        official_credits = (
+            student_info.get("total_grad_credits") if student_info else None
+        )
+        final_earned = (
+            float(official_credits)
+            if official_credits is not None and official_credits > 0
+            else calc_total
+        )
+        percentage = min(
+            100.0, round((final_earned / required_threshold) * 100, 1)
+        )
 
+        # 3. 🌟 關鍵修復：在最終回傳時補上 "competencies": stored_competencies
         return {
             "success": True,
             "has_data": True,
@@ -1401,9 +1419,12 @@ def get_graduation_progress(user_id: int, required_threshold: int = 128):
             "progress_percentage": percentage,
             "earned_credits": final_earned,
             "required_threshold": required_threshold,
-            "remaining_credits": max(0.0, round(required_threshold - final_earned, 1)),
+            "remaining_credits": max(
+                0.0, round(required_threshold - final_earned, 1)
+            ),
             "category_breakdown": categories,
             "courses_by_category": courses_by_category,
+            "competencies": stored_competencies,  # 🌟 補回此行傳給手機
         }
 
     except Exception as e:

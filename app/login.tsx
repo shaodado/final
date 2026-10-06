@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
-import { useState, useEffect } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LinearGradient } from "expo-linear-gradient";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -62,8 +62,11 @@ export default function LoginScreen() {
 
     try {
       setLoading(true);
+      // 支援 EXPO_PUBLIC_API_BASE_URL 或 EXPO_PUBLIC_API_URL
       const baseUrl =
-        process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        process.env.EXPO_PUBLIC_API_BASE_URL ||
+        process.env.EXPO_PUBLIC_API_URL ||
+        "http://127.0.0.1:8000";
 
       const res = await fetch(`${baseUrl}/api/login`, {
         method: "POST",
@@ -77,6 +80,11 @@ export default function LoginScreen() {
       const data = await res.json();
 
       if (data.success) {
+        // 🌟 將當前登入者的學號寫入手機本機快取
+        if (data.userId) {
+          await AsyncStorage.setItem("current_user_id", String(data.userId));
+        }
+
         // role 可能是 "student" / "teacher" / "admin"
         // signIn 會把角色存入 context，由 _layout 依角色導向對應頁面
         signIn(data.role, data.userId, data.name);
@@ -112,19 +120,26 @@ export default function LoginScreen() {
 
     const emailRegex = /^[a-zA-Z0-9._%+-]+@me\.mcu\.edu\.tw$/;
     if (!emailRegex.test(trimmedAccount)) {
-      Alert.alert("信箱格式錯誤", "註冊信箱必須為學校發的 email，後綴須為 @me.mcu.edu.tw。");
+      Alert.alert(
+        "信箱格式錯誤",
+        "註冊信箱必須為學校發的 email，後綴須為 @me.mcu.edu.tw。"
+      );
       return;
     }
 
     const pwdRegex = /^(?=.*[a-zA-Z])(?=.*\d)[a-zA-Z0-9]{1,10}$/;
     if (!pwdRegex.test(trimmedPassword)) {
-      Alert.alert("密碼格式錯誤", "密碼必須是英文與數字混合，且最多 10 碼（不可包含特殊符號）。");
+      Alert.alert(
+        "密碼格式錯誤",
+        "密碼必須是英文與數字混合，且最多 10 碼（不可包含特殊符號）。"
+      );
       return;
     }
 
     try {
       setLoading(true);
-      const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const baseUrl =
+        process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
       const res = await fetch(`${baseUrl}/api/register`, {
         method: "POST",
@@ -139,11 +154,14 @@ export default function LoginScreen() {
 
       if (data.success) {
         Alert.alert("註冊成功", "您的帳號已成功建立，請使用新帳號登入。", [
-          { text: "確定", onPress: () => {
+          {
+            text: "確定",
+            onPress: () => {
               setIsRegistering(false);
               setAccount(trimmedAccount);
               setPassword("");
-          } }
+            },
+          },
         ]);
       } else {
         Alert.alert("註冊失敗", data.message || "請稍後再試。");
@@ -163,7 +181,8 @@ export default function LoginScreen() {
     }
     try {
       setLoading(true);
-      const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const baseUrl =
+        process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const res = await fetch(`${baseUrl}/api/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -195,7 +214,8 @@ export default function LoginScreen() {
     }
     try {
       setLoading(true);
-      const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const baseUrl =
+        process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
       const res = await fetch(`${baseUrl}/api/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -208,13 +228,16 @@ export default function LoginScreen() {
       const data = await res.json();
       if (data.success) {
         Alert.alert("成功", data.message, [
-          { text: "確定", onPress: () => {
+          {
+            text: "確定",
+            onPress: () => {
               setShowForgotModal(false);
               setForgotStep(1);
               setForgotCode("");
               setNewPassword("");
               setAccount(forgotEmail.trim());
-          }}
+            },
+          },
         ]);
       } else {
         Alert.alert("錯誤", data.message || "密碼重設失敗");
@@ -262,13 +285,21 @@ export default function LoginScreen() {
                   colors={["rgba(239,255,249,0.28)", "rgba(172,224,208,0.1)"]}
                   style={styles.card}
                 >
-                  <Text style={styles.cardTitle}>{isRegistering ? "註冊學生帳號" : "登入帳號"}</Text>
+                  <Text style={styles.cardTitle}>
+                    {isRegistering ? "註冊學生帳號" : "登入帳號"}
+                  </Text>
 
                   {isRegistering ? (
                     <>
-                      <Text style={styles.label}>學校信箱 (@me.mcu.edu.tw)</Text>
+                      <Text style={styles.label}>
+                        學校信箱 (@me.mcu.edu.tw)
+                      </Text>
                       <View style={styles.inputWrap}>
-                        <Ionicons name="mail-outline" size={19} color="#A9CEC3" />
+                        <Ionicons
+                          name="mail-outline"
+                          size={19}
+                          color="#A9CEC3"
+                        />
                         <TextInput
                           value={regAccount}
                           onChangeText={setRegAccount}
@@ -281,15 +312,21 @@ export default function LoginScreen() {
                         />
                         {!regAccount.includes("@") && regAccount.length > 0 && (
                           <Pressable
-                            onPress={() => setRegAccount(regAccount + "@me.mcu.edu.tw")}
+                            onPress={() =>
+                              setRegAccount(regAccount + "@me.mcu.edu.tw")
+                            }
                             style={styles.appendSuffixBtn}
                           >
-                            <Text style={styles.appendSuffixText}>補全信箱</Text>
+                            <Text style={styles.appendSuffixText}>
+                              補全信箱
+                            </Text>
                           </Pressable>
                         )}
                       </View>
 
-                      <Text style={styles.label}>密碼 (英數混合，最多10碼)</Text>
+                      <Text style={styles.label}>
+                        密碼 (英數混合，最多10碼)
+                      </Text>
                       <View style={styles.inputWrap}>
                         <Ionicons
                           name="lock-closed-outline"
@@ -311,7 +348,9 @@ export default function LoginScreen() {
                           hitSlop={10}
                         >
                           <Ionicons
-                            name={showPassword ? "eye-off-outline" : "eye-outline"}
+                            name={
+                              showPassword ? "eye-off-outline" : "eye-outline"
+                            }
                             size={20}
                             color="#A9CEC3"
                           />
@@ -319,7 +358,10 @@ export default function LoginScreen() {
                       </View>
 
                       <Pressable
-                        style={[styles.loginButton, loading && { opacity: 0.7 }]}
+                        style={[
+                          styles.loginButton,
+                          loading && { opacity: 0.7 },
+                        ]}
                         onPress={handleRegister}
                         disabled={loading}
                         accessibilityRole="button"
@@ -339,8 +381,16 @@ export default function LoginScreen() {
                         )}
                       </Pressable>
 
-                      <Pressable onPress={() => setIsRegistering(false)} style={{ marginTop: 16 }}>
-                        <Text style={[styles.hint, { color: "#F2C14E", fontSize: 13 }]}>
+                      <Pressable
+                        onPress={() => setIsRegistering(false)}
+                        style={{ marginTop: 16 }}
+                      >
+                        <Text
+                          style={[
+                            styles.hint,
+                            { color: "#F2C14E", fontSize: 13 },
+                          ]}
+                        >
                           已有帳號？點此登入
                         </Text>
                       </Pressable>
@@ -349,7 +399,11 @@ export default function LoginScreen() {
                     <>
                       <Text style={styles.label}>帳號</Text>
                       <View style={styles.inputWrap}>
-                        <Ionicons name="person-outline" size={19} color="#A9CEC3" />
+                        <Ionicons
+                          name="person-outline"
+                          size={19}
+                          color="#A9CEC3"
+                        />
                         <TextInput
                           value={account}
                           onChangeText={setAccount}
@@ -362,10 +416,14 @@ export default function LoginScreen() {
                         />
                         {!account.includes("@") && account.length > 0 && (
                           <Pressable
-                            onPress={() => setAccount(account + "@me.mcu.edu.tw")}
+                            onPress={() =>
+                              setAccount(account + "@me.mcu.edu.tw")
+                            }
                             style={styles.appendSuffixBtn}
                           >
-                            <Text style={styles.appendSuffixText}>補全信箱</Text>
+                            <Text style={styles.appendSuffixText}>
+                              補全信箱
+                            </Text>
                           </Pressable>
                         )}
                       </View>
@@ -392,7 +450,9 @@ export default function LoginScreen() {
                           hitSlop={10}
                         >
                           <Ionicons
-                            name={showPassword ? "eye-off-outline" : "eye-outline"}
+                            name={
+                              showPassword ? "eye-off-outline" : "eye-outline"
+                            }
                             size={20}
                             color="#A9CEC3"
                           />
@@ -400,7 +460,10 @@ export default function LoginScreen() {
                       </View>
 
                       <Pressable
-                        style={[styles.loginButton, loading && { opacity: 0.7 }]}
+                        style={[
+                          styles.loginButton,
+                          loading && { opacity: 0.7 },
+                        ]}
                         onPress={login}
                         disabled={loading}
                         accessibilityRole="button"
@@ -419,20 +482,43 @@ export default function LoginScreen() {
                         )}
                       </Pressable>
 
-                      <Pressable onPress={() => setIsRegistering(true)} style={{ marginTop: 12 }}>
-                        <Text style={[styles.hint, { color: "#F2C14E", fontSize: 13 }]}>
+                      <Pressable
+                        onPress={() => setIsRegistering(true)}
+                        style={{ marginTop: 12 }}
+                      >
+                        <Text
+                          style={[
+                            styles.hint,
+                            { color: "#F2C14E", fontSize: 13 },
+                          ]}
+                        >
                           還沒有帳號？立即註冊
                         </Text>
                       </Pressable>
 
-                      <Pressable onPress={() => { setShowForgotModal(true); setForgotStep(1); setForgotEmail(""); setForgotCode(""); setNewPassword(""); }} style={{ marginTop: 8 }}>
-                        <Text style={[styles.hint, { color: "#C3E0D8", fontSize: 12 }]}>
+                      <Pressable
+                        onPress={() => {
+                          setShowForgotModal(true);
+                          setForgotStep(1);
+                          setForgotEmail("");
+                          setForgotCode("");
+                          setNewPassword("");
+                        }}
+                        style={{ marginTop: 8 }}
+                      >
+                        <Text
+                          style={[
+                            styles.hint,
+                            { color: "#C3E0D8", fontSize: 12 },
+                          ]}
+                        >
                           忘記密碼？
                         </Text>
                       </Pressable>
 
                       <Text style={styles.hint}>
-                        測試帳號：學生 3001 (密碼 123) · 老師 1001 (密碼 321) · 管理員 2001 (密碼 123)
+                        測試帳號：學生 3001 (密碼 123) · 老師 1001 (密碼 321) ·
+                        管理員 2001 (密碼 123)
                       </Text>
                     </>
                   )}
@@ -458,7 +544,12 @@ export default function LoginScreen() {
               <Text style={styles.modalText}>
                 請確認您同意我們使用您的帳號資訊進行資料同步。若您不同意，將無法使用本應用程式的各項功能。
               </Text>
-              <Text style={[styles.modalText, { color: "#F28C8C", fontWeight: "700", marginTop: 10 }]}>
+              <Text
+                style={[
+                  styles.modalText,
+                  { color: "#F28C8C", fontWeight: "700", marginTop: 10 },
+                ]}
+              >
                 注意：請妥善保管個人密碼，我們承諾僅將資料用於本應用程式之資料同步用途。
               </Text>
             </ScrollView>
@@ -466,7 +557,9 @@ export default function LoginScreen() {
             <View style={styles.modalButtons}>
               <Pressable
                 style={[styles.modalBtn, styles.modalBtnDecline]}
-                onPress={() => Alert.alert("提示", "您必須同意才能繼續使用本程式。")}
+                onPress={() =>
+                  Alert.alert("提示", "您必須同意才能繼續使用本程式。")
+                }
               >
                 <Text style={styles.modalBtnDeclineText}>不同意</Text>
               </Pressable>
@@ -485,7 +578,14 @@ export default function LoginScreen() {
       <Modal visible={showForgotModal} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxHeight: "60%" }]}>
-            <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: 16,
+              }}
+            >
               <Text style={styles.modalTitle}>忘記密碼</Text>
               <Pressable onPress={() => setShowForgotModal(false)} hitSlop={10}>
                 <Ionicons name="close" size={24} color="#F0FFF9" />
@@ -507,7 +607,9 @@ export default function LoginScreen() {
                   />
                   {!forgotEmail.includes("@") && forgotEmail.length > 0 && (
                     <Pressable
-                      onPress={() => setForgotEmail(forgotEmail + "@me.mcu.edu.tw")}
+                      onPress={() =>
+                        setForgotEmail(forgotEmail + "@me.mcu.edu.tw")
+                      }
                       style={styles.appendSuffixBtn}
                     >
                       <Text style={styles.appendSuffixText}>補全信箱</Text>
@@ -515,11 +617,19 @@ export default function LoginScreen() {
                   )}
                 </View>
                 <Pressable
-                  style={[styles.loginButton, loading && { opacity: 0.7 }, { marginTop: 20 }]}
+                  style={[
+                    styles.loginButton,
+                    loading && { opacity: 0.7 },
+                    { marginTop: 20 },
+                  ]}
                   onPress={handleRequestCode}
                   disabled={loading}
                 >
-                  {loading ? <ActivityIndicator color="#16445A" /> : <Text style={styles.loginText}>發送驗證碼</Text>}
+                  {loading ? (
+                    <ActivityIndicator color="#16445A" />
+                  ) : (
+                    <Text style={styles.loginText}>發送驗證碼</Text>
+                  )}
                 </Pressable>
               </View>
             ) : (
@@ -540,7 +650,11 @@ export default function LoginScreen() {
 
                 <Text style={styles.label}>新密碼</Text>
                 <View style={styles.inputWrap}>
-                  <Ionicons name="lock-closed-outline" size={18} color="#A9CEC3" />
+                  <Ionicons
+                    name="lock-closed-outline"
+                    size={18}
+                    color="#A9CEC3"
+                  />
                   <TextInput
                     value={newPassword}
                     onChangeText={setNewPassword}
@@ -552,18 +666,25 @@ export default function LoginScreen() {
                 </View>
 
                 <Pressable
-                  style={[styles.loginButton, loading && { opacity: 0.7 }, { marginTop: 20 }]}
+                  style={[
+                    styles.loginButton,
+                    loading && { opacity: 0.7 },
+                    { marginTop: 20 },
+                  ]}
                   onPress={handleResetPassword}
                   disabled={loading}
                 >
-                  {loading ? <ActivityIndicator color="#16445A" /> : <Text style={styles.loginText}>重設密碼</Text>}
+                  {loading ? (
+                    <ActivityIndicator color="#16445A" />
+                  ) : (
+                    <Text style={styles.loginText}>重設密碼</Text>
+                  )}
                 </Pressable>
               </View>
             )}
           </View>
         </View>
       </Modal>
-
     </View>
   );
 }
