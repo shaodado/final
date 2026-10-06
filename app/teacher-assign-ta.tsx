@@ -306,13 +306,14 @@ export default function TeacherAssignTAScreen() {
       : `共 ${students.length} 位學生`;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <View style={styles.page}>
       <Stack.Screen options={{ headerShown: false }} />
-      <View style={styles.container}>
-        {/* 背景 Glow */}
-        <View style={styles.pinkGlow} />
-        <View style={styles.yellowGlow} />
+      
+      {/* 背景 Glow */}
+      <View style={styles.pinkGlow} />
+      <View style={styles.yellowGlow} />
 
+      <SafeAreaView style={styles.safeArea}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -572,7 +573,7 @@ export default function TeacherAssignTAScreen() {
             </View>
           </View>
         )}
-      </View>
+      </SafeAreaView>
 
       {/* ========================= */}
       {/* 確認視窗（覆蓋層，網頁版也能用） */}
@@ -646,7 +647,7 @@ export default function TeacherAssignTAScreen() {
           </View>
         </View>
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -654,16 +655,8 @@ const styles = StyleSheet.create({
   // ==================================
   // 整體
   // ==================================
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#16445A",
-  },
-
-  container: {
-    flex: 1,
-    backgroundColor: "#16445A",
-    overflow: "hidden",
-  },
+  page: { flex: 1, backgroundColor: "#16445A" },
+  safeArea: { flex: 1 },
 
   scrollContent: {
     flexGrow: 1,
@@ -1118,11 +1111,11 @@ const styles = StyleSheet.create({
     elevation: 50,
     justifyContent: "center",
     paddingHorizontal: 32,
-    backgroundColor: "rgba(0,0,0,0.55)",
+    backgroundColor: "transparent",
   },
 
   dialog: {
-    backgroundColor: "#F0FFF9",
+    backgroundColor: "#123A4E",
     borderRadius: 32,
     padding: 24,
   },
@@ -1130,27 +1123,27 @@ const styles = StyleSheet.create({
   dialogTitle: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#16445A",
+    color: "#F0FFF9",
     marginBottom: 8,
   },
 
   dialogText: {
     fontSize: 14,
     lineHeight: 21,
-    color: "#426875",
+    color: "rgba(240,255,249,0.7)",
   },
 
   dialogHint: {
     fontSize: 13,
     lineHeight: 19,
-    color: "#6F8F9A",
+    color: "rgba(240,255,249,0.5)",
     marginTop: 8,
   },
 
   dialogErrorText: {
     fontSize: 13,
     lineHeight: 19,
-    color: "#C23B3B",
+    color: "#F28C8C",
     fontWeight: "700",
     marginTop: 12,
   },
@@ -1170,13 +1163,13 @@ const styles = StyleSheet.create({
   },
 
   dialogCancel: {
-    backgroundColor: "rgba(22,68,90,0.10)",
+    backgroundColor: "rgba(240,255,249,0.15)",
   },
 
   dialogCancelText: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#16445A",
+    color: "#F0FFF9",
   },
 
   dialogConfirm: {
@@ -1190,12 +1183,12 @@ const styles = StyleSheet.create({
   },
 
   dialogDanger: {
-    backgroundColor: "#C23B3B",
+    backgroundColor: "#F28C8C",
   },
 
   dialogDangerText: {
     fontSize: 15,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: "#16445A",
   },
 });
