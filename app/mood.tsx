@@ -1,8 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Keyboard,
   KeyboardAvoidingView,
@@ -21,18 +23,22 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "./_layout";
 
 type CourseItem = {
-  course_id: number;
+  course_id: number | string;
   course_name: string;
   teacher?: string;
   department?: string;
   grade?: string;
   category?: string;
+  semester_term?: string;
+  credits?: number;
+  score?: number | null;
+  is_passed?: boolean;
 };
 
 type Evaluation = {
   _id: string | { $oid: string };
   eval_id?: number;
-  course_id: number;
+  course_id: number | string;
   user_id?: number;
   sweetness: number;
   easiness: number;
@@ -77,7 +83,9 @@ const quizQuestions: string[][] = [
 export default function MoodScreen() {
   const router = useRouter();
   const { userId, userName } = useAuth();
-  const currentUserId = userId || 3001;
+  const [currentUserId, setCurrentUserId] = useState<number | string>(
+    userId || 3001
+  );
 
   const scrollViewRef = useRef<ScrollView>(null);
   const [keyboardHeight, setKeyboardHeight] = useState<number>(0);
@@ -90,14 +98,35 @@ export default function MoodScreen() {
   const [gains, setGains] = useState<number>(0);
   const [comment, setComment] = useState<string>("");
 
-  // 給評：已修課程選單狀態與分頁控制（20 筆/頁）
+  // 給評：已修課程選單狀態與分類
   const [myCourses, setMyCourses] = useState<CourseItem[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<CourseItem | null>(null);
   const [courseModalVisible, setCourseModalVisible] = useState<boolean>(false);
-  const [myCoursePage, setMyCoursePage] = useState<number>(1);
-  const [myCourseTotalPages, setMyCourseTotalPages] = useState<number>(1);
-  const [myCourseTotalCount, setMyCourseTotalCount] = useState<number>(0);
   const [loadingMyCourses, setLoadingMyCourses] = useState<boolean>(false);
+
+  // 校務爬蟲同步狀態（同 courses.tsx 學生進度管理）
+  const [syncModalVisible, setSyncModalVisible] = useState<boolean>(false);
+  const [mcuAccount, setMcuAccount] = useState<string>(
+    String(userId || process.env.EXPO_PUBLIC_DEFAULT_USER_ID || "")
+  );
+  const [mcuPassword, setMcuPassword] = useState<string>("");
+  const [syncing, setSyncing] = useState<boolean>(false);
+
+  // 初始化讀取登入者學號（比照 courses.tsx 讀取 AsyncStorage 快取）
+  useEffect(() => {
+    const initUserId = async () => {
+      try {
+        const stored = await AsyncStorage.getItem("current_user_id");
+        if (stored) {
+          setCurrentUserId(Number(stored));
+          setMcuAccount(stored);
+        }
+      } catch (e) {
+        console.warn("無法讀取本機學號:", e);
+      }
+    };
+    initUserId();
+  }, []);
 
   // 檢索：篩選條件與搜尋出的全校課程清單
   const [filterDept, setFilterDept] = useState<string>("全部");
@@ -124,7 +153,7 @@ export default function MoodScreen() {
   // @ts-ignore
   const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-  // 鍵盤彈起監聽
+  // 鍵盤彈起監聽（僅更新高度，不強制跳到底部，避免遮蔽輸入框）
   useEffect(() => {
     const showEvent =
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -133,10 +162,6 @@ export default function MoodScreen() {
 
     const showSub = Keyboard.addListener(showEvent, (e) => {
       setKeyboardHeight(e.endCoordinates.height);
-      setTimeout(
-        () => scrollViewRef.current?.scrollToEnd({ animated: true }),
-        100
-      );
     });
     const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardHeight(0));
 
@@ -146,30 +171,90 @@ export default function MoodScreen() {
     };
   }, []);
 
-  // 載入學生已修課程（支援每頁 20 筆分頁查詢）
-  const fetchMyCourses = async (page = 1) => {
+  // 載入學生已修通過課程（預設抓取 100 筆以完整涵蓋大一至大四，asc 排序）
+  const fetchMyCourses = async (overrideUserId?: number | string) => {
+    const uid = overrideUserId || currentUserId;
     try {
       setLoadingMyCourses(true);
       const res = await fetch(
-        `${baseUrl}/api/student/my-courses?user_id=${currentUserId}&page=${page}&limit=20`
+        `${baseUrl}/api/student/my-courses?user_id=${uid}&page=1&limit=100&passed_only=true&sort_order=asc`
       );
       const json = await res.json();
-      if (json.success) {
+      if (json.success && json.data) {
         setMyCourses(json.data);
-        setMyCoursePage(json.page);
-        setMyCourseTotalPages(json.total_pages);
-        setMyCourseTotalCount(json.total_count);
-
         if (!selectedCourse && json.data.length > 0) {
           setSelectedCourse(json.data[0]);
         }
+        return json.data as CourseItem[];
       }
+      return [] as CourseItem[];
     } catch (err) {
       console.error("載入已修課程失敗:", err);
+      return [] as CourseItem[];
     } finally {
       setLoadingMyCourses(false);
     }
   };
+
+  // 同步校務成績單（同 courses.tsx 學生進度管理相同邏輯）
+  const handleSyncTranscript = async () => {
+    if (!mcuAccount.trim() || !mcuPassword) {
+      Alert.alert("請填寫完整", "請輸入學生資訊系統帳號與密碼。");
+      return;
+    }
+
+    const targetUserId = Number(mcuAccount.trim());
+    if (isNaN(targetUserId) || targetUserId <= 0) {
+      Alert.alert("格式錯誤", "學號必須為有效的數字。");
+      return;
+    }
+
+    Keyboard.dismiss();
+    setSyncing(true);
+
+    try {
+      const res = await fetch(`${baseUrl}/api/student/sync-transcript`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: targetUserId,
+          mcu_account: mcuAccount.trim(),
+          mcu_password: mcuPassword,
+        }),
+      });
+
+      const json = await res.json();
+      if (res.ok && json.success) {
+        Alert.alert("同步成功", `已成功同步 ${json.synced_count} 筆課程紀錄！`);
+        setCurrentUserId(targetUserId);
+        try {
+          await AsyncStorage.setItem("current_user_id", String(targetUserId));
+        } catch {}
+        setSyncModalVisible(false);
+        setMcuPassword("");
+        fetchMyCourses(targetUserId);
+      } else {
+        let errorMsg = "學校帳號密碼錯誤或伺服器連線異常。";
+        if (typeof json.detail === "string") {
+          errorMsg = json.detail;
+        } else if (Array.isArray(json.detail)) {
+          errorMsg = json.detail
+            .map((e: any) => `${e.loc?.slice(-1)[0]}: ${e.msg}`)
+            .join("\n");
+        }
+        Alert.alert("同步失敗", errorMsg);
+      }
+    } catch {
+      Alert.alert(
+        "連線異常",
+        "無法連線至後端伺服器，請確認電腦 IP 與連線狀態。"
+      );
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+
 
   // 依條件搜尋課程清單（純課程卡片）
   const fetchFilteredCourses = async (
@@ -195,7 +280,7 @@ export default function MoodScreen() {
   };
 
   // 抓取特定課程評價（每頁 20 筆分頁）
-  const fetchCourseReviewsPage = async (courseId: number, page: number) => {
+  const fetchCourseReviewsPage = async (courseId: number | string, page: number) => {
     try {
       setLoadingReviews(true);
       const url = `${baseUrl}/api/evaluations?course_id=${courseId}&page=${page}&limit=20`;
@@ -234,8 +319,7 @@ export default function MoodScreen() {
       setEasiness(0);
       setGains(0);
       setComment("");
-      setMyCoursePage(1);
-      fetchMyCourses(1);
+      fetchMyCourses();
     }
 
     if (nextPanel === "quiz") {
@@ -300,6 +384,8 @@ export default function MoodScreen() {
           gains,
           comment: trimmed,
           evaluation_status: "已審核",
+          course_name: selectedCourse.course_name,
+          semester_term: selectedCourse.semester_term,
         }),
       });
       const json = await res.json();
@@ -386,7 +472,24 @@ export default function MoodScreen() {
                   <View style={styles.panel}>
                     <View style={styles.panelHeader}>
                       <Text style={styles.panelTitle}>給予課程評價</Text>
-                      
+                      <Pressable
+                        style={styles.syncBtnSmall}
+                        onPress={async () => {
+                          const stored = await AsyncStorage.getItem("current_user_id");
+                          setMcuAccount(stored || String(currentUserId));
+                          setSyncModalVisible(true);
+                        }}
+                        disabled={syncing}
+                      >
+                        {syncing ? (
+                          <ActivityIndicator size="small" color="#F2C14E" />
+                        ) : (
+                          <>
+                            <Ionicons name="sync" size={13} color="#F2C14E" />
+                            <Text style={styles.syncBtnTextSmall}>同步</Text>
+                          </>
+                        )}
+                      </Pressable>
                     </View>
 
                     <Text style={styles.inputLabel}>選擇要評價的已修課程</Text>
@@ -402,8 +505,8 @@ export default function MoodScreen() {
                         </Text>
                         <Text style={styles.dropdownCourseSub}>
                           {selectedCourse
-                            ? `${selectedCourse.teacher || "授課教師"} · ${selectedCourse.category || "必修"} · ${selectedCourse.department || "系所"}`
-                            : "點擊載入已修課程"}
+                            ? `${selectedCourse.semester_term ? `[${selectedCourse.semester_term}] ` : ""}${selectedCourse.teacher && selectedCourse.teacher !== "專任教師" && selectedCourse.teacher !== "授課教師" ? selectedCourse.teacher : "---"} · ${selectedCourse.category || "必修"} · ${selectedCourse.credits !== undefined ? `${selectedCourse.credits}學分` : ""}`
+                            : "點擊載入並選擇已修通過之課程"}
                         </Text>
                       </View>
                       <Ionicons name="chevron-down" size={18} color="#9AD8ED" />
@@ -438,6 +541,12 @@ export default function MoodScreen() {
                       placeholderTextColor="#7BA79C"
                       maxLength={30}
                       multiline
+                      onFocus={() => {
+                        // 聚焦時將視圖平滑定位在心得輸入區，防止跳到底部
+                        setTimeout(() => {
+                          scrollViewRef.current?.scrollTo({ y: 280, animated: true });
+                        }, 100);
+                      }}
                     />
                     <Text style={styles.charCount}>
                       {comment.length} / 30 字
@@ -786,7 +895,7 @@ export default function MoodScreen() {
           </ScrollView>
         </KeyboardAvoidingView>
 
-        {/* 彈出視窗 1：選擇已修課程 Modal（升級 85% 高度與每頁 20 筆分頁列） */}
+        {/* 彈出視窗 1：選擇已修課程 Modal */}
         <Modal visible={courseModalVisible} transparent animationType="slide">
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { height: "85%" }]}>
@@ -794,7 +903,7 @@ export default function MoodScreen() {
                 <View style={{ flex: 1, paddingRight: 10 }}>
                   <Text style={styles.modalTitle}>選擇已修課程</Text>
                   <Text style={styles.modalSubtitle}>
-                    僅顯示個人成績紀錄中已修過之課程
+                    僅顯示學生資訊系統已通過之課程
                   </Text>
                 </View>
                 <Pressable onPress={() => setCourseModalVisible(false)}>
@@ -802,121 +911,277 @@ export default function MoodScreen() {
                 </Pressable>
               </View>
 
-              {loadingMyCourses ? (
+              {/* 頂部操作與統計列 */}
+              <View style={styles.modalToolRow}>
+                <Text style={styles.modalToolCount}>
+                  共 {myCourses.length} 門已通過課程
+                </Text>
+                <Pressable
+                  style={styles.syncBtnSmall}
+                  onPress={async () => {
+                    const stored = await AsyncStorage.getItem("current_user_id");
+                    setMcuAccount(stored || String(currentUserId));
+                    setSyncModalVisible(true);
+                  }}
+                  disabled={syncing}
+                >
+                  {syncing ? (
+                    <ActivityIndicator size="small" color="#F2C14E" />
+                  ) : (
+                    <>
+                      <Ionicons name="sync" size={13} color="#F2C14E" />
+                      <Text style={styles.syncBtnTextSmall}>同步</Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+
+              {loadingMyCourses || syncing ? (
                 <View
                   style={{
                     flex: 1,
                     justifyContent: "center",
                     alignItems: "center",
+                    gap: 10,
                   }}
                 >
-                  <Text style={styles.panelCopy}>載入已修課程中...</Text>
+                  <ActivityIndicator size="large" color="#F2C14E" />
+                  <Text style={styles.panelCopy}>
+                    {syncing
+                      ? "正在爬取學生資訊系統已通過課程..."
+                      : "載入已修通過課程中..."}
+                  </Text>
                 </View>
               ) : myCourses.length === 0 ? (
-                <View
-                  style={{
-                    flex: 1,
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  <Text style={styles.panelCopy}>查無已修課程紀錄。</Text>
+                <View style={styles.emptyCoursesContainer}>
+                  <Ionicons
+                    name="school-outline"
+                    size={48}
+                    color="#9AD8ED"
+                  />
+                  <Text style={styles.emptyCoursesTitle}>
+                    沒有可評價課程
+                  </Text>
+                  <Text style={styles.emptyCoursesSubtitle}>
+                    尚未取得已通過之修課資料，請先同步校務成績。
+                  </Text>
+                  <Pressable
+                    style={styles.emptySyncBtn}
+                    onPress={async () => {
+                      const stored = await AsyncStorage.getItem("current_user_id");
+                      setMcuAccount(stored || String(currentUserId));
+                      setSyncModalVisible(true);
+                    }}
+                  >
+                    <Ionicons name="sync" size={16} color="#16445A" />
+                    <Text style={styles.emptySyncBtnText}>
+                      同步
+                    </Text>
+                  </Pressable>
                 </View>
               ) : (
                 <ScrollView
                   style={{ flex: 1 }}
                   showsVerticalScrollIndicator={false}
                 >
-                  {myCourses.map((c) => (
-                    <Pressable
-                      key={c.course_id}
-                      style={[
-                        styles.courseSelectItem,
-                        selectedCourse?.course_id === c.course_id &&
-                          styles.courseSelectItemActive,
-                      ]}
-                      onPress={() => {
-                        setSelectedCourse(c);
-                        setCourseModalVisible(false);
-                      }}
-                    >
-                      <Text style={styles.courseSelectName}>
-                        {c.course_name}
-                      </Text>
-                      <Text style={styles.courseSelectDetail}>
-                        {c.teacher || "授課教師"} · {c.department || "系所"} (
-                        {c.category || "必修"})
-                      </Text>
-                    </Pressable>
-                  ))}
+                  {myCourses.map((c, index) => {
+                    const teacherName =
+                      c.teacher &&
+                      c.teacher !== "專任教師" &&
+                      c.teacher !== "授課教師"
+                        ? c.teacher
+                        : "---";
+
+                    return (
+                      <Pressable
+                        key={`${c.course_id}_${c.semester_term}_${index}`}
+                        style={[
+                          styles.courseSelectItem,
+                          selectedCourse?.course_id === c.course_id &&
+                            selectedCourse?.semester_term ===
+                              c.semester_term &&
+                            styles.courseSelectItemActive,
+                        ]}
+                        onPress={() => {
+                          setSelectedCourse(c);
+                          setCourseModalVisible(false);
+                        }}
+                      >
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            marginBottom: 4,
+                          }}
+                        >
+                          <Text style={styles.courseSelectName}>
+                            {c.course_name}
+                          </Text>
+                          {c.semester_term ? (
+                            <View style={styles.semesterBadge}>
+                              <Text style={styles.semesterBadgeText}>
+                                {c.semester_term}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                            gap: 6,
+                          }}
+                        >
+                          <Text style={styles.courseSelectDetail}>
+                            教師：{teacherName} ·{" "}
+                            {c.department || "系所"} (
+                            {c.category || "必修"})
+                          </Text>
+                          {c.credits !== undefined ? (
+                            <Text style={styles.courseSelectDetail}>
+                              · {c.credits} 學分
+                            </Text>
+                          ) : null}
+                          <View style={styles.passedBadge}>
+                            <Text style={styles.passedBadgeText}>
+                              通過
+                            </Text>
+                          </View>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
                 </ScrollView>
               )}
-
-              {/* 已修課程分頁切換列 */}
-              {myCourseTotalCount > 0 && (
-                <View style={styles.paginationBar}>
-                  <Pressable
-                    style={[
-                      styles.pageBtn,
-                      myCoursePage <= 1 && styles.pageBtnDisabled,
-                    ]}
-                    disabled={myCoursePage <= 1 || loadingMyCourses}
-                    onPress={() => fetchMyCourses(myCoursePage - 1)}
+              {/* 🌟 內嵌同步覆蓋層（避免 iOS/Android 雙重原生 Modal 衝突導致點擊無反應） */}
+              {syncModalVisible && (
+                <View style={styles.inlineSyncOverlay}>
+                  <KeyboardAvoidingView
+                    behavior={Platform.OS === "ios" ? "padding" : undefined}
+                    style={styles.keyboardAvoidContainer}
                   >
-                    <Ionicons
-                      name="chevron-back"
-                      size={16}
-                      color={myCoursePage <= 1 ? "#5C7E77" : "#16445A"}
-                    />
-                    <Text
-                      style={[
-                        styles.pageBtnText,
-                        myCoursePage <= 1 && styles.pageBtnTextDisabled,
-                      ]}
-                    >
-                      上一頁
-                    </Text>
-                  </Pressable>
+                    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                      <View style={styles.modalCard}>
+                        <Text style={styles.modalTitle}>同步校務成績單</Text>
+                        <Text style={styles.modalSubtitle}>
+                          輸入學校資訊系統帳密以更新最新學分。密碼僅在記憶體中處理，遵循數據不落地原則。
+                        </Text>
 
-                  <Text style={styles.pageInfoText}>
-                    第 {myCoursePage} / {myCourseTotalPages} 頁（共{" "}
-                    {myCourseTotalCount} 門）
-                  </Text>
+                        <TextInput
+                          style={styles.modalInput}
+                          placeholder="學生學號"
+                          placeholderTextColor="rgba(240,255,249,0.4)"
+                          value={mcuAccount}
+                          onChangeText={setMcuAccount}
+                          autoCapitalize="none"
+                          keyboardType="number-pad"
+                        />
 
-                  <Pressable
-                    style={[
-                      styles.pageBtn,
-                      myCoursePage >= myCourseTotalPages &&
-                        styles.pageBtnDisabled,
-                    ]}
-                    disabled={
-                      myCoursePage >= myCourseTotalPages || loadingMyCourses
-                    }
-                    onPress={() => fetchMyCourses(myCoursePage + 1)}
-                  >
-                    <Text
-                      style={[
-                        styles.pageBtnText,
-                        myCoursePage >= myCourseTotalPages &&
-                          styles.pageBtnTextDisabled,
-                      ]}
-                    >
-                      下一頁
-                    </Text>
-                    <Ionicons
-                      name="chevron-forward"
-                      size={16}
-                      color={
-                        myCoursePage >= myCourseTotalPages
-                          ? "#5C7E77"
-                          : "#16445A"
-                      }
-                    />
-                  </Pressable>
+                        <TextInput
+                          style={styles.modalInput}
+                          placeholder="學生資訊系統密碼"
+                          placeholderTextColor="rgba(240,255,249,0.4)"
+                          value={mcuPassword}
+                          onChangeText={setMcuPassword}
+                          secureTextEntry
+                        />
+
+                        <View style={styles.modalBtnRow}>
+                          <Pressable
+                            style={[styles.modalBtn, styles.modalCancelBtn]}
+                            onPress={() => setSyncModalVisible(false)}
+                            disabled={syncing}
+                          >
+                            <Text style={styles.modalCancelText}>取消</Text>
+                          </Pressable>
+
+                          <Pressable
+                            style={[styles.modalBtn, styles.modalConfirmBtn]}
+                            onPress={handleSyncTranscript}
+                            disabled={syncing}
+                          >
+                            {syncing ? (
+                              <ActivityIndicator color="#16445A" />
+                            ) : (
+                              <Text style={styles.modalConfirmText}>開始同步</Text>
+                            )}
+                          </Pressable>
+                        </View>
+                      </View>
+                    </TouchableWithoutFeedback>
+                  </KeyboardAvoidingView>
                 </View>
               )}
             </View>
           </View>
+        </Modal>
+
+        {/* 彈出視窗 3：同步校務成績單（當選課視窗未開啟時由主畫面調用） */}
+        <Modal
+          visible={syncModalVisible && !courseModalVisible}
+          transparent
+          animationType="fade"
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.modalCenteredOverlay}>
+              <KeyboardAvoidingView
+                behavior={Platform.OS === "ios" ? "padding" : undefined}
+                style={styles.keyboardAvoidContainer}
+              >
+                <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                  <View style={styles.modalCard}>
+                    <Text style={styles.modalTitle}>同步校務成績單</Text>
+                    <Text style={styles.modalSubtitle}>
+                      輸入學校資訊系統帳密以更新最新學分。密碼僅在記憶體中處理，遵循數據不落地原則。
+                    </Text>
+
+                    <TextInput
+                      style={styles.modalInput}
+                      placeholder="學生學號"
+                      placeholderTextColor="rgba(240,255,249,0.4)"
+                      value={mcuAccount}
+                      onChangeText={setMcuAccount}
+                      autoCapitalize="none"
+                      keyboardType="number-pad"
+                    />
+
+                    <TextInput
+                      style={styles.modalInput}
+                      placeholder="學生資訊系統密碼"
+                      placeholderTextColor="rgba(240,255,249,0.4)"
+                      value={mcuPassword}
+                      onChangeText={setMcuPassword}
+                      secureTextEntry
+                    />
+
+                    <View style={styles.modalBtnRow}>
+                      <Pressable
+                        style={[styles.modalBtn, styles.modalCancelBtn]}
+                        onPress={() => setSyncModalVisible(false)}
+                        disabled={syncing}
+                      >
+                        <Text style={styles.modalCancelText}>取消</Text>
+                      </Pressable>
+
+                      <Pressable
+                        style={[styles.modalBtn, styles.modalConfirmBtn]}
+                        onPress={handleSyncTranscript}
+                        disabled={syncing}
+                      >
+                        {syncing ? (
+                          <ActivityIndicator color="#16445A" />
+                        ) : (
+                          <Text style={styles.modalConfirmText}>開始同步</Text>
+                        )}
+                      </Pressable>
+                    </View>
+                  </View>
+                </TouchableWithoutFeedback>
+              </KeyboardAvoidingView>
+            </View>
+          </TouchableWithoutFeedback>
         </Modal>
 
         {/* 彈出視窗 2：特定課程評價獨立頁面（每頁 20 筆分頁列） */}
@@ -1468,5 +1733,227 @@ const styles = StyleSheet.create({
   pageBtnText: { color: "#16445A", fontSize: 12, fontWeight: "800" },
   pageBtnTextDisabled: { color: "#5C7E77" },
   pageInfoText: { color: "#A9CEC3", fontSize: 11, fontWeight: "700" },
+
+  /* 課程彈窗同步工具列與標籤樣式 */
+  modalToolRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingBottom: 10,
+    marginBottom: 6,
+    borderBottomWidth: 1,
+    borderColor: "rgba(236,255,248,0.15)",
+  },
+  modalToolCount: {
+    color: "#9AD8ED",
+    fontSize: 12,
+    fontWeight: "600",
+  },
+  syncBtnSmall: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(242, 193, 78, 0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(242, 193, 78, 0.4)",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    gap: 4,
+  },
+  syncBtnTextSmall: {
+    color: "#F2C14E",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  semesterBadge: {
+    backgroundColor: "rgba(154, 216, 237, 0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(154, 216, 237, 0.35)",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  semesterBadgeText: {
+    color: "#9AD8ED",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  passedBadge: {
+    backgroundColor: "rgba(167, 243, 208, 0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(167, 243, 208, 0.35)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  passedBadgeText: {
+    color: "#A7F3D0",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  /* 年級分類切換標籤樣式 */
+  gradeFilterRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  gradeFilterPill: {
+    flex: 1,
+    paddingVertical: 7,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 10,
+    backgroundColor: "rgba(239, 255, 249, 0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(236, 255, 248, 0.2)",
+  },
+  gradeFilterPillActive: {
+    backgroundColor: "#F2C14E",
+    borderColor: "#F2C14E",
+  },
+  gradeFilterPillText: {
+    color: "#C3E0D8",
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  gradeFilterPillTextActive: {
+    color: "#16445A",
+    fontWeight: "800",
+  },
+
+  /* 學期分組與標題樣式 */
+  semesterHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(239, 255, 249, 0.08)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginTop: 8,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#F2C14E",
+  },
+  semesterHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  semesterHeaderTitle: {
+    color: "#F0FFF9",
+    fontSize: 14,
+    fontWeight: "800",
+  },
+  semesterCountPill: {
+    backgroundColor: "rgba(242, 193, 78, 0.15)",
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  semesterCountText: {
+    color: "#F2C14E",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  semesterEmptyText: {
+    color: "rgba(240, 255, 249, 0.4)",
+    fontSize: 12,
+    fontStyle: "italic",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+
+  /* 空課程狀態樣式 */
+  emptyCoursesContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 40,
+    paddingHorizontal: 20,
+    gap: 12,
+  },
+  emptyCoursesTitle: {
+    color: "#F0FFF9",
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  emptyCoursesSubtitle: {
+    color: "rgba(240, 255, 249, 0.65)",
+    fontSize: 13,
+    textAlign: "center",
+    lineHeight: 18,
+  },
+  emptySyncBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F2C14E",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginTop: 6,
+  },
+  emptySyncBtnText: {
+    color: "#16445A",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  /* 校務同步對話框樣式（與 courses.tsx 一致） */
+  inlineSyncOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.75)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+    zIndex: 9999,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+  },
+  modalCenteredOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  keyboardAvoidContainer: { width: "100%", alignItems: "center" },
+  modalCard: {
+    width: "100%",
+    backgroundColor: "#16445A",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(236,255,248,0.3)",
+    padding: 24,
+  },
+  modalInput: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: "rgba(236,255,248,0.25)",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    color: "#F0FFF9",
+    fontSize: 15,
+    marginBottom: 12,
+  },
+  modalBtnRow: { flexDirection: "row", gap: 12, marginTop: 8 },
+  modalBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalCancelBtn: { backgroundColor: "rgba(255,255,255,0.12)" },
+  modalCancelText: { color: "#F0FFF9", fontWeight: "700" },
+  modalConfirmBtn: { backgroundColor: "#F2C14E" },
+  modalConfirmText: { color: "#16445A", fontWeight: "800" },
 });
 

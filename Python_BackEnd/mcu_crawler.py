@@ -106,6 +106,99 @@ def parse_graduation_competencies(soup: BeautifulSoup) -> List[Dict[str, Any]]:
     return unique_competencies
 
 
+def crawl_eportfolio_courses(session: requests.Session) -> List[Dict[str, Any]]:
+    """
+    抓取 MCU ePortfolio (學生學習歷程檔案系統) page02/index.asp?ch=6
+    取得該學生修課時間、課程名稱、專任教師與通過狀態
+    """
+    eportfolio_url = "https://eportfolio.mcu.edu.tw/ePortfolio/Student/page02/index.asp?ch=6"
+    courses = []
+    try:
+        res = session.get(
+            eportfolio_url,
+            headers={"Referer": "https://www.mcu.edu.tw/student/new-query/"},
+            timeout=10,
+        )
+        res.encoding = res.apparent_encoding or "big5"
+        soup = BeautifulSoup(res.text, "html.parser")
+
+        current_term = ""
+        for table in soup.find_all("table"):
+            for tr in table.find_all("tr"):
+                text = tr.get_text(strip=True)
+                # 判斷是否為學期分組列，例如「110學年度第1學期」或「110-1」
+                term_match = re.search(
+                    r"(\d{2,3})\s*(?:學年度|[-_/])\s*(?:第?\s*([12上下])\s*學期|(\d))",
+                    text,
+                )
+                if term_match:
+                    y = term_match.group(1)
+                    s_raw = term_match.group(2) or term_match.group(3)
+                    s = "1" if s_raw in ["1", "上"] else "2"
+                    current_term = f"{y}-{s}"
+
+                cells = [td.get_text(strip=True) for td in tr.find_all(["td", "th"])]
+                if len(cells) < 3:
+                    continue
+
+                if any(kw in "".join(cells) for kw in ["科目名稱", "課程名稱", "學期", "學分", "教師"]):
+                    continue
+
+                course_id = ""
+                course_name = ""
+                teacher = "---"
+                credits = 0.0
+                score = None
+                is_passed = True
+                term = current_term
+
+                for c_text in cells:
+                    tm = re.search(r"^(\d{2,3})[-_/]?([12])$", c_text)
+                    if tm:
+                        term = f"{tm.group(1)}-{tm.group(2)}"
+                    elif re.match(r"^\d(?:\.0)?$", c_text) and credits == 0.0:
+                        try:
+                            credits = float(c_text)
+                        except Exception:
+                            pass
+                    elif re.match(r"^\d{4,6}$", c_text) and not course_id:
+                        course_id = c_text
+                    elif c_text.replace(".", "", 1).isdigit() and 0 <= float(c_text) <= 100:
+                        try:
+                            score = float(c_text)
+                            is_passed = score >= 60
+                        except Exception:
+                            pass
+
+                text_cells = [
+                    c for c in cells
+                    if not re.match(r"^\d+(\.\d+)?$", c)
+                    and c not in ["必修", "選修", "通過", "及格", "不通過", "不及格"]
+                ]
+                if text_cells:
+                    course_name = text_cells[0]
+                    if len(text_cells) > 1:
+                        cand = text_cells[1]
+                        if cand and cand not in ["專任教師", "授課教師", "---"]:
+                            teacher = cand
+
+                if course_name:
+                    courses.append({
+                        "course_id": course_id or course_name,
+                        "course_name": course_name,
+                        "semester_term": term,
+                        "credits": credits,
+                        "score": score,
+                        "is_passed": is_passed,
+                        "teacher": teacher,
+                    })
+    except Exception as e:
+        print(f"ePortfolio爬取跳過: {e}")
+
+    return courses
+
+
+
 def crawl_mcu_transcript(
     student_id: str, password: str
 ) -> Tuple[Dict[str, int], List[Dict[str, Any]], Dict[str, Any]]:
@@ -176,8 +269,9 @@ def crawl_mcu_transcript(
     # 4. 剖析 HTML 資料
     soup = BeautifulSoup(html, "html.parser")
 
-    # 4.0 解析學生基本資料（年級、姓名、系所）
+    # 4.0 解析學生基本資料（年級、姓名、系所）與畢業資格檢定
     student_info = parse_student_info(soup)
+    competencies = parse_graduation_competencies(soup)
 
     # 4.1 學分總覽
     summary: Dict[str, int] = {}
@@ -267,11 +361,31 @@ def crawl_mcu_transcript(
             seen.add(key)
             unique_courses.append(c)
 
-    # 4.0 解析基本資料與畢業資格檢定
-    student_info = parse_student_info(soup)
-    competencies = parse_graduation_competencies(soup)  # 🌟 新增這行
+    # 4.3 爬取 ePortfolio (page02/index.asp?ch=6) 補齊教師姓名與修課資訊
+    try:
+        ep_courses = crawl_eportfolio_courses(session)
+        if ep_courses:
+            ep_by_term = {
+                (c["course_name"], c["semester_term"]): c
+                for c in ep_courses if c.get("course_name")
+            }
+            ep_by_name = {
+                c["course_name"]: c
+                for c in ep_courses if c.get("course_name")
+            }
 
-    # ... 中間抓取 summary 與 unique_courses 不變 ...
+            for c in unique_courses:
+                matched = ep_by_term.get((c["course_name"], c["semester_term"])) or ep_by_name.get(c["course_name"])
+                if matched and matched.get("teacher") and matched["teacher"] != "---":
+                    c["teacher"] = matched["teacher"]
+                elif not c.get("teacher"):
+                    c["teacher"] = "---"
+    except Exception:
+        pass
+
+    for c in unique_courses:
+        if not c.get("teacher") or c.get("teacher") in ["專任教師", "授課教師"]:
+            c["teacher"] = "---"
 
     # 🌟 回傳 4 個物件：summary, courses, student_info, competencies
     return summary, unique_courses, student_info, competencies

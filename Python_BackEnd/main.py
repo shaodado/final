@@ -1,6 +1,6 @@
 import re
 from datetime import datetime, timedelta
-from typing import Optional, Dict
+from typing import Optional, Dict, List, Union, Any
 import random
 
 from bson import ObjectId
@@ -36,13 +36,20 @@ class ResetPasswordRequest(BaseModel):
 # 課程評價
 # -------------------------
 class EvaluationCreate(BaseModel):
-    course_id: int
+    course_id: Union[int, str]
     user_id: int
     sweetness: float
     easiness: float
     gains: float
     comment: str
     evaluation_status: str = "已審核"
+    course_name: Optional[str] = None
+    semester_term: Optional[str] = None
+
+
+class AutoSyncCoursesRequest(BaseModel):
+    user_id: int
+    mcu_password: Optional[str] = None
 
 
 # -------------------------
@@ -160,6 +167,35 @@ def evaluation_filter(key: str) -> dict:
     if key.isdigit():
         return {"eval_id": int(key)}
     raise HTTPException(status_code=400, detail="評價 ID 格式不正確")
+
+
+def parse_semester_sort_key(term: Any) -> tuple:
+    """
+    解析學期字串以利時間排序（例如 113-1, 112-2, 1131, 112學年度第1學期）。
+    回傳 (學年, 學期) 元組，方便比較大小。
+    """
+    if not term:
+        return (0, 0)
+    s = str(term).strip()
+    digits = re.findall(r"\d+", s)
+    if len(digits) >= 2:
+        try:
+            return (int(digits[0]), int(digits[1]))
+        except ValueError:
+            pass
+    elif len(digits) == 1:
+        d = digits[0]
+        if len(d) == 4:
+            try:
+                return (int(d[:3]), int(d[3]))
+            except ValueError:
+                pass
+        elif len(d) >= 1:
+            try:
+                return (int(d), 0)
+            except ValueError:
+                pass
+    return (0, 0)
 
 
 # =============================================================
@@ -578,58 +614,109 @@ def create_evaluation(eval_data: EvaluationCreate):
 
 
 # =============================================================
-# 11. 學生已修課程
+# 11. 學生已修課程（支援僅篩選已通過課程，並依照時間由新到舊排序）
 # =============================================================
 
 @app.get("/api/student/my-courses")
 def get_student_courses(
     user_id: int,
     page: int = 1,
-    limit: int = 20,
+    limit: int = 100,
+    passed_only: bool = True,
+    sort_order: str = "asc",
 ):
     try:
-        records = list(
-            db["STUDENT_ACADEMIC_RECORD"].find({"user_id": user_id})
+        query = {"user_id": user_id}
+        if passed_only:
+            query["is_passed"] = True
+
+        records = list(db["STUDENT_ACADEMIC_RECORD"].find(query))
+
+        # 依照學期時間排序（asc: 從大一到大四由上到下; desc: 從大四到大一）
+        records.sort(
+            key=lambda r: parse_semester_sort_key(r.get("semester_term", "")),
+            reverse=(sort_order == "desc"),
         )
 
-        course_ids = [r["course_id"] for r in records if "course_id" in r]
-
-        courses_col = db["COURSE"]
-
-        if course_ids:
-            query = {"course_id": {"$in": course_ids}}
-        else:
-            query = {"course_id": -999}
-
-        total_count = (
-            courses_col.count_documents(query) if course_ids else 0
-        )
-
+        total_count = len(records)
         total_pages = (
-            max(1, (total_count + limit - 1) // limit)
-            if total_count > 0
-            else 1
+            max(1, (total_count + limit - 1) // limit) if total_count > 0 else 1
         )
-
         skip = max(0, (page - 1) * limit)
+        paged_records = records[skip : skip + limit]
 
-        if course_ids:
-            courses = list(courses_col.find(query).skip(skip).limit(limit))
-        else:
-            courses = []
+        # 嘗試從 COURSE collection 尋找教師或系所資訊做補充
+        course_ids = [r.get("course_id") for r in paged_records if r.get("course_id")]
+        course_name_list = [
+            r.get("course_name") for r in paged_records if r.get("course_name")
+        ]
 
-        for course in courses:
-            course["_id"] = str(course["_id"])
+        course_meta_map = {}
+        if course_ids or course_name_list:
+            or_conditions = []
+            if course_ids:
+                cid_candidates = []
+                for cid in course_ids:
+                    cid_candidates.append(cid)
+                    if isinstance(cid, str) and cid.isdigit():
+                        cid_candidates.append(int(cid))
+                    elif isinstance(cid, int):
+                        cid_candidates.append(str(cid))
+                or_conditions.append({"course_id": {"$in": cid_candidates}})
+            if course_name_list:
+                or_conditions.append({"course_name": {"$in": course_name_list}})
 
-            course.setdefault("teacher", "專任教師")
-            course.setdefault("department", course.get("domain", "資訊工程學系"))
-            course.setdefault("grade", "大三")
-            course.setdefault("category", "必修")
+            if or_conditions:
+                matched_courses = list(
+                    db["COURSE"].find({"$or": or_conditions})
+                )
+                for mc in matched_courses:
+                    if "course_id" in mc:
+                        course_meta_map[str(mc["course_id"])] = mc
+                    if "course_name" in mc:
+                        course_meta_map[mc["course_name"]] = mc
+
+        result_courses = []
+        for r in paged_records:
+            cid = r.get("course_id")
+            cname = r.get("course_name", "未知課程")
+            meta = (
+                course_meta_map.get(str(cid))
+                or course_meta_map.get(cname)
+                or {}
+            )
+
+            raw_teacher = r.get("teacher") or meta.get("teacher")
+            teacher = (
+                raw_teacher
+                if raw_teacher and raw_teacher not in ["專任教師", "授課教師"]
+                else "---"
+            )
+
+            item = {
+                "_id": str(r["_id"]),
+                "course_id": cid if cid is not None else str(r["_id"]),
+                "course_name": cname,
+                "teacher": teacher,
+                "department": r.get("department")
+                or meta.get("department")
+                or meta.get("domain")
+                or "全校",
+                "grade": r.get("grade") or meta.get("grade") or "大學部",
+                "category": r.get("category") or meta.get("category") or "必修",
+                "semester_term": r.get("semester_term", ""),
+                "credits": float(
+                    r.get("earned_credits", r.get("credits", 0.0))
+                ),
+                "score": r.get("score"),
+                "is_passed": bool(r.get("is_passed", True)),
+            }
+            result_courses.append(item)
 
         return {
             "success": True,
-            "data": courses,
-            "count": len(courses),
+            "data": result_courses,
+            "count": len(result_courses),
             "total_count": total_count,
             "page": page,
             "total_pages": total_pages,
@@ -638,6 +725,123 @@ def get_student_courses(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================
+# 11.1 學生已修課程同步與取得（爬蟲一鍵完成）
+# =============================================================
+
+@app.post("/api/student/sync-and-get-courses")
+def sync_and_get_courses(req: AutoSyncCoursesRequest):
+    try:
+        # 1. 尋找學生密碼
+        password = req.mcu_password
+        if not password:
+            student = db["STUDENT"].find_one({"user_id": req.user_id})
+            if not student and str(req.user_id).isdigit():
+                student = db["STUDENT"].find_one({"user_id": int(req.user_id)})
+
+            if student and student.get("password"):
+                password = str(student["password"])
+
+        if not password:
+            return {
+                "success": False,
+                "require_password": True,
+                "message": "尚未儲存校務系統密碼，請輸入學生資訊系統密碼以進行同步。",
+            }
+
+        # 2. 執行爬蟲
+        student_id_str = str(req.user_id)
+        summary, courses, student_info, competencies = crawl_mcu_transcript(
+            student_id_str, password
+        )
+
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # 3. 儲存至 STUDENT_ACADEMIC_RECORD
+        for c in courses:
+            db["STUDENT_ACADEMIC_RECORD"].update_one(
+                {
+                    "user_id": req.user_id,
+                    "course_name": c["course_name"],
+                    "semester_term": c["semester_term"],
+                },
+                {
+                    "$set": {
+                        **c,
+                        "user_id": req.user_id,
+                        "updated_at": now_str,
+                    }
+                },
+                upsert=True,
+            )
+
+        # 4. 更新 STUDENT 集合
+        update_fields = {
+            "total_taken_credits": summary.get("total_taken", 0),
+            "total_grad_credits": summary.get("total_grad_credit", 0),
+            "unlisted_credits": summary.get("unlisted_credit", 0),
+            "audit_updated_at": now_str,
+            "competencies": competencies,
+        }
+        if student_info.get("grade"):
+            update_fields["grade"] = student_info["grade"]
+        if student_info.get("student_name"):
+            update_fields["student_name"] = student_info["student_name"]
+
+        db["STUDENT"].update_one(
+            {"user_id": req.user_id},
+            {"$set": update_fields},
+            upsert=True,
+        )
+
+        # 5. 回傳已通過且排序之課程（由大一到大四 asc 排序）
+        passed_courses = [c for c in courses if c.get("is_passed")]
+        passed_courses.sort(
+            key=lambda r: parse_semester_sort_key(r.get("semester_term", "")),
+            reverse=False,
+        )
+
+        formatted_courses = []
+        for c in passed_courses:
+            raw_teacher = c.get("teacher")
+            teacher = (
+                raw_teacher
+                if raw_teacher and raw_teacher not in ["專任教師", "授課教師"]
+                else "---"
+            )
+            formatted_courses.append({
+                "course_id": c.get("course_id", ""),
+                "course_name": c.get("course_name", "未知課程"),
+                "teacher": teacher,
+                "department": c.get("department", "全校"),
+                "grade": c.get("grade", "大學部"),
+                "category": c.get("category", "必修"),
+                "semester_term": c.get("semester_term", ""),
+                "credits": float(c.get("earned_credits", c.get("credits", 0.0))),
+                "score": c.get("score"),
+                "is_passed": True,
+            })
+
+        return {
+            "success": True,
+            "message": f"成功同步 {len(courses)} 門課程（共 {len(passed_courses)} 門通過）！",
+            "synced_count": len(courses),
+            "passed_count": len(passed_courses),
+            "data": formatted_courses,
+        }
+
+    except MCUAuthError as e:
+        return {
+            "success": False,
+            "require_password": True,
+            "message": f"校務系統登入失敗: {str(e)}，請重新輸入密碼。",
+        }
+    except MCUCrawlerError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"伺服器內部錯誤: {str(e)}")
 
 
 # =============================================================
