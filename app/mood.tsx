@@ -8,6 +8,7 @@ import {
   Alert,
   Keyboard,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -33,6 +34,12 @@ type CourseItem = {
   credits?: number;
   score?: number | null;
   is_passed?: boolean;
+  classroom?: string;
+  schedule?: string;
+  class_name?: string;
+  syllabus_url?: string;
+  capacity?: number;
+  enrolled?: number;
 };
 
 type Evaluation = {
@@ -981,9 +988,9 @@ export default function MoodScreen() {
                           nestedScrollEnabled={true}
                           showsVerticalScrollIndicator={true}
                         >
-                          {searchedCourses.map((course) => (
+                          {searchedCourses.map((course, index) => (
                             <Pressable
-                              key={course.course_id}
+                              key={`${course.course_id}_${course.class_code || index}`}
                               style={styles.courseSelectCard}
                               onPress={() => handleOpenCourseReviews(course)}
                             >
@@ -1261,15 +1268,16 @@ export default function MoodScreen() {
                           nestedScrollEnabled={true}
                           showsVerticalScrollIndicator={true}
                         >
-                          {detailsCourses.map((course) => (
+                          {detailsCourses.map((course, index) => (
                             <Pressable
-                              key={course.course_id}
+                              key={`${course.course_id}_${course.class_code || index}`}
                               style={styles.courseSelectCard}
                               onPress={() => handleOpenCourseDetails(course)}
                             >
                               <View style={{ flex: 1 }}>
                                 <Text style={styles.courseCardName}>
                                   {course.course_name}
+                                  {course.class_name ? ` (${course.class_name})` : ""}
                                 </Text>
                                 <Text style={styles.courseCardMeta}>
                                   {course.teacher || "授課教師"} ·{" "}
@@ -1280,6 +1288,18 @@ export default function MoodScreen() {
                                     ? ` · ${course.credits}學分`
                                     : ""}
                                 </Text>
+                                {(Boolean(course.schedule) || Boolean(course.classroom)) && (
+                                  <Text
+                                    style={[
+                                      styles.courseCardMeta,
+                                      { color: "#F2C14E", marginTop: 2 },
+                                    ]}
+                                  >
+                                    {course.schedule ? `🕒 ${course.schedule}` : ""}
+                                    {course.schedule && course.classroom ? "  |  " : ""}
+                                    {course.classroom ? `📍 ${course.classroom}` : ""}
+                                  </Text>
+                                )}
                               </View>
                               <View style={styles.viewBadge}>
                                 <Ionicons
@@ -1662,13 +1682,19 @@ export default function MoodScreen() {
                 </Pressable>
               </View>
 
-              {/* 課程詳細資料卡片 (包含教師、系所、年級、修別、學分) */}
+              {/* 課程詳細資料卡片 (包含教師、班級、系所、年級、修別、學分、上課時間、教室與大綱) */}
               <View style={styles.courseDetailCard}>
                 <View style={styles.courseDetailGrid}>
                   <View style={styles.courseDetailItem}>
                     <Text style={styles.courseDetailLabel}>授課教師</Text>
                     <Text style={styles.courseDetailVal}>
                       {selectedReviewCourse?.teacher || "---"}
+                    </Text>
+                  </View>
+                  <View style={styles.courseDetailItem}>
+                    <Text style={styles.courseDetailLabel}>開課班級</Text>
+                    <Text style={styles.courseDetailVal}>
+                      {selectedReviewCourse?.class_name || "---"}
                     </Text>
                   </View>
                   <View style={styles.courseDetailItem}>
@@ -1692,6 +1718,57 @@ export default function MoodScreen() {
                         : "3 學分"}
                     </Text>
                   </View>
+                  <View style={styles.courseDetailItem}>
+                    <Text style={styles.courseDetailLabel}>選課/開班人數</Text>
+                    <Text style={styles.courseDetailVal}>
+                      {selectedReviewCourse?.enrolled !== undefined &&
+                      selectedReviewCourse?.capacity !== undefined
+                        ? `${selectedReviewCourse.enrolled} / ${selectedReviewCourse.capacity}`
+                        : "---"}
+                    </Text>
+                  </View>
+                  {Boolean(selectedReviewCourse?.schedule) && (
+                    <View style={[styles.courseDetailItem, { width: "100%" }]}>
+                      <Text style={styles.courseDetailLabel}>上課時間 / 節次</Text>
+                      <Text style={styles.courseDetailVal}>
+                        🕒 {selectedReviewCourse?.schedule}
+                      </Text>
+                    </View>
+                  )}
+                  {Boolean(selectedReviewCourse?.classroom) && (
+                    <View style={[styles.courseDetailItem, { width: "100%" }]}>
+                      <Text style={styles.courseDetailLabel}>教室 / 地點</Text>
+                      <Text style={styles.courseDetailVal}>
+                        📍 {selectedReviewCourse?.classroom}
+                      </Text>
+                    </View>
+                  )}
+                  {Boolean(selectedReviewCourse?.syllabus_url) && (
+                    <View style={[styles.courseDetailItem, { width: "100%", marginTop: 4 }]}>
+                      <Pressable
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 6,
+                          backgroundColor: "rgba(182,227,194,0.15)",
+                          paddingVertical: 6,
+                          paddingHorizontal: 10,
+                          borderRadius: 8,
+                          alignSelf: "flex-start",
+                        }}
+                        onPress={() => {
+                          if (selectedReviewCourse?.syllabus_url) {
+                            Linking.openURL(selectedReviewCourse.syllabus_url);
+                          }
+                        }}
+                      >
+                        <Ionicons name="document-text-outline" size={15} color="#B6E3C2" />
+                        <Text style={{ color: "#B6E3C2", fontSize: 13, fontWeight: "600" }}>
+                          查看學校官方教學大綱 ↗
+                        </Text>
+                      </Pressable>
+                    </View>
+                  )}
                 </View>
               </View>
 

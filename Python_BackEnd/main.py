@@ -853,9 +853,9 @@ def get_all_departments():
     """取得銘傳大學現有所有系所清單（包含資料庫中已有的系所）"""
     official_depts = [
         "全部",
-        "全校通識",
+        "通識教育中心",
         "體育室",
-        "英語教學中心",
+        "外語教學中心",
         "資訊工程學系",
         "資訊管理學系",
         "資訊傳播工程學系",
@@ -866,7 +866,7 @@ def get_all_departments():
         "半導體應用學士學位學程",
         "商業設計學系",
         "商品設計學系",
-        "數位媒體設計系",
+        "數位媒體設計學系",
         "建築學系",
         "都市規劃與防災學系",
         "動漫文創設計學士學位學程",
@@ -906,8 +906,11 @@ def get_all_departments():
     ]
     try:
         db_depts = db["COURSE"].distinct("department")
-        merged = list(official_depts)
+        merged = ["全部"]
         for d in db_depts:
+            if d and d not in merged:
+                merged.append(d)
+        for d in official_depts:
             if d and d not in merged:
                 merged.append(d)
         return {"success": True, "data": merged}
@@ -920,29 +923,67 @@ def search_courses(
     department: str = "全部",
     grade: str = "全部",
     category: str = "全部",
+    keyword: Optional[str] = None,
+    limit: int = 200,
+    skip: int = 0,
 ):
+    """
+    詳細課程檢索：支援依科系、年級（大一~大四/1~4）、修別、關鍵字進行全校課程檢索
+    """
     try:
-        query = {}
+        conditions = []
 
         if department != "全部":
-            clean_dept = department.replace("學系", "").replace("系", "").strip()
-            query["$or"] = [
-                {"department": department},
-                {"department": {"$regex": clean_dept, "$options": "i"}},
-                {"domain": {"$regex": clean_dept, "$options": "i"}},
-            ]
+            clean_dept = department.replace("學系", "").replace("系", "").replace("中心", "").strip()
+            conditions.append({
+                "$or": [
+                    {"department": department},
+                    {"department": {"$regex": clean_dept, "$options": "i"}},
+                    {"domain": {"$regex": clean_dept, "$options": "i"}},
+                ]
+            })
 
         if grade != "全部":
-            query["grade"] = grade
+            grade_map = {
+                "1": ["1", "大一", "一年級"],
+                "2": ["2", "大二", "二年級"],
+                "3": ["3", "大三", "三年級"],
+                "4": ["4", "大四", "四年級"],
+                "大一": ["1", "大一", "一年級"],
+                "大二": ["2", "大二", "二年級"],
+                "大三": ["3", "大三", "三年級"],
+                "大四": ["4", "大四", "四年級"],
+            }
+            candidates = grade_map.get(grade, [grade])
+            conditions.append({
+                "$or": [
+                    {"grade": {"$in": candidates}},
+                    {"raw_grade": {"$in": candidates}},
+                ]
+            })
 
         if category != "全部":
-            query["category"] = category
+            conditions.append({"category": category})
 
-        courses = list(db["COURSE"].find(query))
+        if keyword and keyword.strip():
+            kw = keyword.strip()
+            conditions.append({
+                "$or": [
+                    {"course_name": {"$regex": kw, "$options": "i"}},
+                    {"teacher": {"$regex": kw, "$options": "i"}},
+                    {"course_id": {"$regex": kw, "$options": "i"}},
+                    {"class_name": {"$regex": kw, "$options": "i"}},
+                    {"classroom": {"$regex": kw, "$options": "i"}},
+                ]
+            })
+
+        query = {"$and": conditions} if conditions else {}
+
+        total_count = db["COURSE"].count_documents(query)
+        courses = list(db["COURSE"].find(query).skip(skip).limit(limit))
 
         for course in courses:
             course["_id"] = str(course["_id"])
-
             course.setdefault("teacher", "授課教師")
             course.setdefault("department", course.get("domain", "全校通識"))
             course.setdefault("grade", "大三")
@@ -951,9 +992,25 @@ def search_courses(
         return {
             "success": True,
             "count": len(courses),
+            "total": total_count,
             "data": courses,
         }
 
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/courses/crawl")
+def trigger_crawl_courses(dept: Optional[str] = None, by_grade: bool = True):
+    """手動觸發爬取銘傳大學最新開課資料並更新至資料庫"""
+    try:
+        from crawl_all_courses import run_crawler
+        courses = run_crawler(dept_filter=dept, by_grade=by_grade)
+        return {
+            "success": True,
+            "count": len(courses) if courses else 0,
+            "message": "全校開課課程爬取並更新完成！"
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -3,7 +3,8 @@ from pymongo import MongoClient
 from dotenv import load_dotenv
 
 # 讀取同目錄下的 .env 環境變數
-load_dotenv()
+env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+load_dotenv(dotenv_path=env_file)
 
 MONGODB_URI = os.getenv("MONGODB_URI")
 DB_NAME = os.getenv("DB_NAME", "campus_app")
