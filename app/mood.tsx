@@ -49,7 +49,59 @@ type Evaluation = {
 
 type Panel = "rate" | "quiz" | "reviews" | "details" | "reminder" | null;
 
-const DEPARTMENTS = ["全部", "資訊工程學系", "數位媒體設計系", "全校通識"];
+const DEPARTMENTS = [
+  "全部",
+  "全校通識",
+  "體育室",
+  "英語教學中心",
+  "資訊工程學系",
+  "資訊管理學系",
+  "資訊傳播工程學系",
+  "電腦與通訊工程學系",
+  "電子工程學系",
+  "電機工程學系",
+  "人工智慧應用學系",
+  "半導體應用學士學位學程",
+  "商業設計學系",
+  "商品設計學系",
+  "數位媒體設計系",
+  "建築學系",
+  "都市規劃與防災學系",
+  "動漫文創設計學士學位學程",
+  "企業管理學系",
+  "國際企業學系",
+  "財務金融學系",
+  "風險管理與保險學系",
+  "會計學系",
+  "經濟與金融學系",
+  "應用統計與資料科學學系",
+  "金融科技應用學士學位學程",
+  "新聞學系",
+  "廣播電視學系",
+  "廣告暨策略行銷學系",
+  "新媒體暨傳播管理學系",
+  "傳播學院全媒體學士學位學程",
+  "觀光事業學系",
+  "休閒遊憩管理學系",
+  "餐旅管理學系",
+  "應用中國文學系",
+  "應用英語學系",
+  "應用日語學系",
+  "華語文教學學系",
+  "法律學系",
+  "財金法律學系",
+  "公共事務與行政管理學系",
+  "諮商臨床與工商心理學系",
+  "犯罪防治學系",
+  "生物科技學系",
+  "醫療資訊與管理學系",
+  "生物醫學工程學系",
+  "國際企業學士學位學程",
+  "新聞與大眾傳播學士學位學程",
+  "觀光學士學位學程",
+  "資訊科技應用學士學位學程",
+  "流行音樂與舞蹈學士學位學程",
+];
 const GRADES = ["全部", "大一", "大二", "大三", "大四"];
 const CATEGORIES = ["全部", "必修", "選修", "通識"];
 
@@ -132,8 +184,25 @@ export default function MoodScreen() {
   const [filterDept, setFilterDept] = useState<string>("全部");
   const [filterGrade, setFilterGrade] = useState<string>("全部");
   const [filterCategory, setFilterCategory] = useState<string>("全部");
+  const [departmentList, setDepartmentList] = useState<string[]>(DEPARTMENTS);
+  const [deptDropdownOpen, setDeptDropdownOpen] = useState<boolean>(false);
+  const [deptSearchQuery, setDeptSearchQuery] = useState<string>("");
   const [searchedCourses, setSearchedCourses] = useState<CourseItem[]>([]);
   const [loadingCourses, setLoadingCourses] = useState<boolean>(false);
+
+  // 取得後端所有系所清單（若後端有其他系所則自動合併）
+  useEffect(() => {
+    const fetchDepts = async () => {
+      try {
+        const res = await fetch(`${baseUrl}/api/courses/departments`);
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          setDepartmentList(json.data);
+        }
+      } catch {}
+    };
+    fetchDepts();
+  }, []);
 
   // 檢索：特定課程評價彈窗（20 筆/頁）
   const [selectedReviewCourse, setSelectedReviewCourse] =
@@ -651,38 +720,119 @@ export default function MoodScreen() {
                     </View>
 
                     <Text style={styles.filterTitle}>系所別</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.pillRow}
+                    {/* 下拉式選單觸發按鈕 */}
+                    <Pressable
+                      style={styles.deptDropdownTrigger}
+                      onPress={() => setDeptDropdownOpen(!deptDropdownOpen)}
                     >
-                      {DEPARTMENTS.map((dept) => (
-                        <Pressable
-                          key={dept}
-                          style={[
-                            styles.pill,
-                            filterDept === dept && styles.pillActive,
-                          ]}
-                          onPress={() => {
-                            setFilterDept(dept);
-                            fetchFilteredCourses(
-                              dept,
-                              filterGrade,
-                              filterCategory
-                            );
-                          }}
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                          flex: 1,
+                        }}
+                      >
+                        <Ionicons
+                          name="school-outline"
+                          size={16}
+                          color="#F2C14E"
+                        />
+                        <Text style={styles.deptDropdownSelectedText}>
+                          {filterDept === "全部" ? "全部系所" : filterDept}
+                        </Text>
+                      </View>
+                      <Ionicons
+                        name={deptDropdownOpen ? "chevron-up" : "chevron-down"}
+                        size={18}
+                        color="#9AD8ED"
+                      />
+                    </Pressable>
+
+                    {/* 下拉式選單內容列表（展開時顯示） */}
+                    {deptDropdownOpen && (
+                      <View style={styles.deptDropdownMenu}>
+                        {/* 快速搜尋過濾框 */}
+                        <View style={styles.deptSearchRow}>
+                          <Ionicons name="search" size={15} color="#9AD8ED" />
+                          <TextInput
+                            style={styles.deptSearchInput}
+                            placeholder="快速搜尋系所（例如：資管、設計...）"
+                            placeholderTextColor="rgba(240,255,249,0.4)"
+                            value={deptSearchQuery}
+                            onChangeText={setDeptSearchQuery}
+                            autoCapitalize="none"
+                          />
+                          {deptSearchQuery.length > 0 && (
+                            <Pressable onPress={() => setDeptSearchQuery("")}>
+                              <Ionicons
+                                name="close-circle"
+                                size={16}
+                                color="#9AD8ED"
+                              />
+                            </Pressable>
+                          )}
+                        </View>
+
+                        {/* 可滾動所有系所項目清單 */}
+                        <ScrollView
+                          style={{ maxHeight: 220 }}
+                          nestedScrollEnabled={true}
+                          showsVerticalScrollIndicator={true}
+                          keyboardShouldPersistTaps="handled"
                         >
-                          <Text
-                            style={[
-                              styles.pillText,
-                              filterDept === dept && styles.pillTextActive,
-                            ]}
-                          >
-                            {dept}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
+                          {departmentList
+                            .filter((d) =>
+                              deptSearchQuery.trim() === ""
+                                ? true
+                                : d
+                                    .toLowerCase()
+                                    .includes(
+                                      deptSearchQuery.trim().toLowerCase()
+                                    )
+                            )
+                            .map((dept) => {
+                              const isSelected = filterDept === dept;
+                              return (
+                                <Pressable
+                                  key={dept}
+                                  style={[
+                                    styles.deptDropdownItem,
+                                    isSelected && styles.deptDropdownItemActive,
+                                  ]}
+                                  onPress={() => {
+                                    setFilterDept(dept);
+                                    setDeptDropdownOpen(false);
+                                    setDeptSearchQuery("");
+                                    fetchFilteredCourses(
+                                      dept,
+                                      filterGrade,
+                                      filterCategory
+                                    );
+                                  }}
+                                >
+                                  <Text
+                                    style={[
+                                      styles.deptDropdownItemText,
+                                      isSelected &&
+                                        styles.deptDropdownItemTextActive,
+                                    ]}
+                                  >
+                                    {dept}
+                                  </Text>
+                                  {isSelected && (
+                                    <Ionicons
+                                      name="checkmark-circle"
+                                      size={16}
+                                      color="#16445A"
+                                    />
+                                  )}
+                                </Pressable>
+                              );
+                            })}
+                        </ScrollView>
+                      </View>
+                    )}
 
                     <Text style={styles.filterTitle}>年級</Text>
                     <ScrollView
@@ -1955,5 +2105,69 @@ const styles = StyleSheet.create({
   modalCancelText: { color: "#F0FFF9", fontWeight: "700" },
   modalConfirmBtn: { backgroundColor: "#F2C14E" },
   modalConfirmText: { color: "#16445A", fontWeight: "800" },
+  deptDropdownTrigger: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    backgroundColor: "rgba(239,255,249,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(236,255,248,0.25)",
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    marginBottom: 8,
+  },
+  deptDropdownSelectedText: {
+    color: "#F0FFF9",
+    fontSize: 14,
+    fontWeight: "700",
+  },
+  deptDropdownMenu: {
+    backgroundColor: "rgba(18, 52, 70, 0.98)",
+    borderWidth: 1,
+    borderColor: "rgba(242, 193, 78, 0.5)",
+    borderRadius: 14,
+    padding: 10,
+    marginBottom: 10,
+    gap: 8,
+  },
+  deptSearchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(236, 255, 248, 0.2)",
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    gap: 8,
+  },
+  deptSearchInput: {
+    flex: 1,
+    color: "#F0FFF9",
+    fontSize: 13,
+    paddingVertical: 2,
+  },
+  deptDropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 9,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    marginVertical: 1,
+  },
+  deptDropdownItemActive: {
+    backgroundColor: "#F2C14E",
+  },
+  deptDropdownItemText: {
+    color: "#C3E0D8",
+    fontSize: 13,
+    fontWeight: "600",
+  },
+  deptDropdownItemTextActive: {
+    color: "#16445A",
+    fontWeight: "800",
+  },
 });
 

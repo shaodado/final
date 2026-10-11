@@ -848,6 +848,73 @@ def sync_and_get_courses(req: AutoSyncCoursesRequest):
 # 12. 全校課程搜尋
 # =============================================================
 
+@app.get("/api/courses/departments")
+def get_all_departments():
+    """取得銘傳大學現有所有系所清單（包含資料庫中已有的系所）"""
+    official_depts = [
+        "全部",
+        "全校通識",
+        "體育室",
+        "英語教學中心",
+        "資訊工程學系",
+        "資訊管理學系",
+        "資訊傳播工程學系",
+        "電腦與通訊工程學系",
+        "電子工程學系",
+        "電機工程學系",
+        "人工智慧應用學系",
+        "半導體應用學士學位學程",
+        "商業設計學系",
+        "商品設計學系",
+        "數位媒體設計系",
+        "建築學系",
+        "都市規劃與防災學系",
+        "動漫文創設計學士學位學程",
+        "企業管理學系",
+        "國際企業學系",
+        "財務金融學系",
+        "風險管理與保險學系",
+        "會計學系",
+        "經濟與金融學系",
+        "應用統計與資料科學學系",
+        "金融科技應用學士學位學程",
+        "新聞學系",
+        "廣播電視學系",
+        "廣告暨策略行銷學系",
+        "新媒體暨傳播管理學系",
+        "傳播學院全媒體學士學位學程",
+        "觀光事業學系",
+        "休閒遊憩管理學系",
+        "餐旅管理學系",
+        "應用中國文學系",
+        "應用英語學系",
+        "應用日語學系",
+        "華語文教學學系",
+        "法律學系",
+        "財金法律學系",
+        "公共事務與行政管理學系",
+        "諮商臨床與工商心理學系",
+        "犯罪防治學系",
+        "生物科技學系",
+        "醫療資訊與管理學系",
+        "生物醫學工程學系",
+        "國際企業學士學位學程",
+        "新聞與大眾傳播學士學位學程",
+        "觀光學士學位學程",
+        "資訊科技應用學士學位學程",
+        "流行音樂與舞蹈學士學位學程",
+    ]
+    try:
+        db_depts = db["COURSE"].distinct("department")
+        merged = list(official_depts)
+        for d in db_depts:
+            if d and d not in merged:
+                merged.append(d)
+        return {"success": True, "data": merged}
+    except Exception:
+        return {"success": True, "data": official_depts}
+
+
 @app.get("/api/courses/search")
 def search_courses(
     department: str = "全部",
@@ -858,7 +925,12 @@ def search_courses(
         query = {}
 
         if department != "全部":
-            query["department"] = department
+            clean_dept = department.replace("學系", "").replace("系", "").strip()
+            query["$or"] = [
+                {"department": department},
+                {"department": {"$regex": clean_dept, "$options": "i"}},
+                {"domain": {"$regex": clean_dept, "$options": "i"}},
+            ]
 
         if grade != "全部":
             query["grade"] = grade
