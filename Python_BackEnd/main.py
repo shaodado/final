@@ -693,15 +693,26 @@ def get_student_courses(
                 else "---"
             )
 
+            # 🌟 去除任何班級或校區字樣，僅保留純粹課程名稱與系所名稱
+            clean_cname = re.sub(r"【.*?】|\[.*?\]", "", cname).strip()
+            clean_cname = re.sub(
+                r"\s*\(?(?:資工|資管|資傳|電通|電子|電機|人工|半導|商設|品設|數媒|建築|都防|動漫|企管|國企|財金|風保|會計|經金|統資|金科|新聞|廣電|廣銷|新媒|傳播|觀光|休閒|餐旅|應中|應英|應日|華語|法律|財法|公行|心理|犯防|生技|醫管|生工)[一二三四1234][甲乙丙丁]\)?",
+                "",
+                clean_cname,
+            ).strip()
+            clean_cname = re.sub(r"\s*\(?(?:[一二三四1234]年級)?[甲乙丙丁]班\)?", "", clean_cname).strip()
+            clean_cname = re.sub(r"\s*\(?(?:桃園|台北|基河|金門)校區?\)?", "", clean_cname).strip() or cname
+
+            raw_dept = r.get("department") or meta.get("department") or meta.get("domain") or "全校"
+            clean_dept = re.sub(r"[一二三四1234]年級.*$", "", raw_dept).strip()
+            clean_dept = re.sub(r"[甲乙丙丁]班.*$", "", clean_dept).strip() or raw_dept
+
             item = {
                 "_id": str(r["_id"]),
                 "course_id": cid if cid is not None else str(r["_id"]),
-                "course_name": cname,
+                "course_name": clean_cname,
                 "teacher": teacher,
-                "department": r.get("department")
-                or meta.get("department")
-                or meta.get("domain")
-                or "全校",
+                "department": clean_dept,
                 "grade": r.get("grade") or meta.get("grade") or "大學部",
                 "category": r.get("category") or meta.get("category") or "必修",
                 "semester_term": r.get("semester_term", ""),
@@ -926,9 +937,11 @@ def search_courses(
     keyword: Optional[str] = None,
     limit: int = 200,
     skip: int = 0,
+    distinct_by_name: bool = False,
 ):
     """
     詳細課程檢索：支援依科系、年級（大一~大四/1~4）、修別、關鍵字進行全校課程檢索
+    若 distinct_by_name=True，則對課程名稱去重，僅保留純粹課程名稱，並移除班級與校區資訊（適用於給予課程評價及結構化課評檢索）
     """
     try:
         conditions = []
@@ -979,8 +992,9 @@ def search_courses(
 
         query = {"$and": conditions} if conditions else {}
 
-        total_count = db["COURSE"].count_documents(query)
-        courses = list(db["COURSE"].find(query).skip(skip).limit(limit))
+        # 若需要去重（純課程名稱模式，排除班級與校區），取足量資料後以純課程名稱聚合
+        fetch_limit = limit if not distinct_by_name else max(limit * 3, 500)
+        courses = list(db["COURSE"].find(query).skip(skip).limit(fetch_limit))
 
         for course in courses:
             course["_id"] = str(course["_id"])
@@ -989,6 +1003,45 @@ def search_courses(
             course.setdefault("grade", "大三")
             course.setdefault("category", "選修")
 
+        if distinct_by_name:
+            seen_names = set()
+            distinct_courses = []
+            for c in courses:
+                raw_name = c.get("course_name", "").strip()
+                # 去除任何班級或校區標籤
+                clean_name = re.sub(r"【.*?】|\[.*?\]", "", raw_name).strip()
+                clean_name = re.sub(
+                    r"\s*\(?(?:資工|資管|資傳|電通|電子|電機|人工|半導|商設|品設|數媒|建築|都防|動漫|企管|國企|財金|風保|會計|經金|統資|金科|新聞|廣電|廣銷|新媒|傳播|觀光|休閒|餐旅|應中|應英|應日|華語|法律|財法|公行|心理|犯防|生技|醫管|生工)[一二三四1234][甲乙丙丁]\)?",
+                    "",
+                    clean_name,
+                ).strip()
+                clean_name = re.sub(r"\s*\(?(?:[一二三四1234]年級)?[甲乙丙丁]班\)?", "", clean_name).strip()
+                clean_name = re.sub(r"\s*\(?(?:桃園|台北|基河|金門)校區?\)?", "", clean_name).strip() or raw_name
+
+                # 以 (課名, 教師) 唯一識別
+                dedup_key = (clean_name, c.get("teacher", ""))
+                if dedup_key not in seen_names:
+                    seen_names.add(dedup_key)
+                    item = dict(c)
+                    item["course_name"] = clean_name
+                    # 徹底移除班級與校區/教室欄位
+                    item.pop("class_name", None)
+                    item.pop("class_code", None)
+                    item.pop("classroom", None)
+                    item.pop("campus", None)
+                    item.pop("schedule", None)
+                    distinct_courses.append(item)
+                    if len(distinct_courses) >= limit:
+                        break
+
+            return {
+                "success": True,
+                "count": len(distinct_courses),
+                "total": len(distinct_courses),
+                "data": distinct_courses,
+            }
+
+        total_count = db["COURSE"].count_documents(query)
         return {
             "success": True,
             "count": len(courses),

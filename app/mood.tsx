@@ -37,6 +37,7 @@ type CourseItem = {
   classroom?: string;
   schedule?: string;
   class_name?: string;
+  class_code?: string;
   syllabus_url?: string;
   capacity?: number;
   enrolled?: number;
@@ -114,24 +115,73 @@ const CATEGORIES = ["全部", "必修", "選修", "通識"];
 
 const defaultCourses = [
   {
-    name: "使用者經驗設計",
-    teacher: "林怡君",
+    name: "人工智慧概論",
+    teacher: "郭國隆",
     time: "週二 10:10–12:00",
-    rating: 4.7,
+    rating: 4.8,
   },
   {
-    name: "資料視覺化",
-    teacher: "陳柏宇",
+    name: "離散數學",
+    teacher: "林彥宇",
     time: "週四 13:10–15:00",
     rating: 4.5,
   },
   {
-    name: "互動媒體程式設計",
-    teacher: "張雅雯",
+    name: "程式設計（二）",
+    teacher: "陳柏宇",
     time: "週五 09:10–12:00",
-    rating: 4.8,
+    rating: 4.7,
   },
 ];
+
+// 🌟 純化課程名稱（徹底移除班級與校區/地點資訊）
+const cleanCourseName = (name?: string): string => {
+  if (!name) return "";
+  let n = name.replace(/【.*?】/g, "").replace(/\[.*?\]/g, "").trim();
+  n = n
+    .replace(
+      /\s*\(?(?:資工|資管|資傳|電通|電子|電機|人工|半導|商設|品設|數媒|建築|都防|動漫|企管|國企|財金|風保|會計|經金|統資|金科|新聞|廣電|廣銷|新媒|傳播|觀光|休閒|餐旅|應中|應英|應日|華語|法律|財法|公行|心理|犯防|生技|醫管|生工)[一二三四1234][甲乙丙丁]\)?/g,
+      ""
+    )
+    .trim();
+  n = n.replace(/\s*\(?(?:[一二三四1234]年級)?[甲乙丙丁]班\)?/g, "").trim();
+  n = n.replace(/\s*\(?(?:桃園|台北|基河|金門)校區?\)?/g, "").trim();
+  return n || name;
+};
+
+// 🌟 格式化上下學期標示
+const formatSemesterLabel = (term?: string): string => {
+  if (!term) return "";
+  const t = term.trim();
+  if (t === "上" || t === "1") return "上學期";
+  if (t === "下" || t === "2") return "下學期";
+  if (t === "暑" || t === "3") return "暑期";
+  if (t.includes("上")) return t.includes("學期") ? t : `${t}學期`;
+  if (t.includes("下")) return t.includes("學期") ? t : `${t}學期`;
+  if (t.endsWith("-1")) return `${t} 上學期`;
+  if (t.endsWith("-2")) return `${t} 下學期`;
+  if (/^\d{3}1$/.test(t)) return `${t.slice(0, 3)}-1 上學期`;
+  if (/^\d{3}2$/.test(t)) return `${t.slice(0, 3)}-2 下學期`;
+  return t;
+};
+
+// 🌟 純化系所名稱（移除系級中的年級班級如 四年級甲班，並過濾非系所標籤）
+const cleanDepartment = (dept?: string): string => {
+  if (!dept) return "全校";
+  if (
+    dept.includes("傳播學院全媒體") ||
+    dept.includes("不分系") ||
+    dept.includes("金門校區")
+  ) {
+    return "全校通識";
+  }
+  return (
+    dept
+      .replace(/[一二三四1234]年級.*$/, "")
+      .replace(/[甲乙丙丁]班.*$/, "")
+      .trim() || dept
+  );
+};
 
 const quizQuestions: string[][] = [
   ["你最享受哪種學習方式？", "動手做作品", "分析與研究"],
@@ -162,6 +212,12 @@ export default function MoodScreen() {
   const [selectedCourse, setSelectedCourse] = useState<CourseItem | null>(null);
   const [courseModalVisible, setCourseModalVisible] = useState<boolean>(false);
   const [loadingMyCourses, setLoadingMyCourses] = useState<boolean>(false);
+
+  // 🌟 給予課程評價：搜尋關鍵字與標籤切換（已修通過 vs 全校課程庫）
+  const [rateCourseSearchQuery, setRateCourseSearchQuery] = useState<string>("");
+  const [rateCourseTab, setRateCourseTab] = useState<"passed" | "all">("passed");
+  const [allCoursesForRating, setAllCoursesForRating] = useState<CourseItem[]>([]);
+  const [loadingAllCoursesForRating, setLoadingAllCoursesForRating] = useState<boolean>(false);
 
   // 校務爬蟲同步狀態（同 courses.tsx 學生進度管理）
   const [syncModalVisible, setSyncModalVisible] = useState<boolean>(false);
@@ -287,6 +343,25 @@ export default function MoodScreen() {
     }
   };
 
+  // 🌟 載入全校所有去重課程庫（用於給予課程評價選擇，無班級無校區）
+  const fetchAllCoursesForRating = async () => {
+    if (allCoursesForRating.length > 0) return;
+    try {
+      setLoadingAllCoursesForRating(true);
+      const res = await fetch(
+        `${baseUrl}/api/courses/search?distinct_by_name=true&limit=300`
+      );
+      const json = await res.json();
+      if (json.success && json.data) {
+        setAllCoursesForRating(json.data);
+      }
+    } catch (err) {
+      console.error("載入全校評價課程庫失敗:", err);
+    } finally {
+      setLoadingAllCoursesForRating(false);
+    }
+  };
+
   // 同步校務成績單（同 courses.tsx 學生進度管理相同邏輯）
   const handleSyncTranscript = async () => {
     if (!mcuAccount.trim() || !mcuPassword) {
@@ -357,7 +432,9 @@ export default function MoodScreen() {
       setLoadingCourses(true);
       const url = `${baseUrl}/api/courses/search?department=${encodeURIComponent(
         dept
-      )}&grade=${encodeURIComponent(grade)}&category=${encodeURIComponent(category)}`;
+      )}&grade=${encodeURIComponent(grade)}&category=${encodeURIComponent(
+        category
+      )}&distinct_by_name=true`;
       const res = await fetch(url);
       const json = await res.json();
       if (json.success) {
@@ -505,6 +582,7 @@ export default function MoodScreen() {
     }
 
     try {
+      const pureCourseName = cleanCourseName(selectedCourse.course_name);
       const res = await fetch(`${baseUrl}/api/evaluations`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -516,7 +594,7 @@ export default function MoodScreen() {
           gains,
           comment: trimmed,
           evaluation_status: "已審核",
-          course_name: selectedCourse.course_name,
+          course_name: pureCourseName,
           semester_term: selectedCourse.semester_term,
         }),
       });
@@ -524,7 +602,7 @@ export default function MoodScreen() {
       if (json.success) {
         Alert.alert(
           "送出成功",
-          `你對《${selectedCourse.course_name}》的評價已成功儲存！`
+          `你對《${pureCourseName}》的評價已成功儲存！`
         );
         setSweetness(0);
         setEasiness(0);
@@ -624,21 +702,24 @@ export default function MoodScreen() {
                       </Pressable>
                     </View>
 
-                    <Text style={styles.inputLabel}>選擇要評價的已修課程</Text>
+                    <Text style={styles.inputLabel}>選擇課程評價</Text>
                     <Pressable
                       style={styles.dropdownBtn}
-                      onPress={() => setCourseModalVisible(true)}
+                      onPress={() => {
+                        setRateCourseSearchQuery("");
+                        setCourseModalVisible(true);
+                      }}
                     >
                       <View style={{ flex: 1 }}>
                         <Text style={styles.dropdownCourseTitle}>
                           {selectedCourse
-                            ? selectedCourse.course_name
+                            ? cleanCourseName(selectedCourse.course_name)
                             : "請選擇課程"}
                         </Text>
                         <Text style={styles.dropdownCourseSub}>
                           {selectedCourse
-                            ? `${selectedCourse.semester_term ? `[${selectedCourse.semester_term}] ` : ""}${selectedCourse.teacher && selectedCourse.teacher !== "專任教師" && selectedCourse.teacher !== "授課教師" ? selectedCourse.teacher : "---"} · ${selectedCourse.category || "必修"} · ${selectedCourse.credits !== undefined ? `${selectedCourse.credits}學分` : ""}`
-                            : "點擊載入並選擇已修通過之課程"}
+                            ? `${selectedCourse.semester_term ? `${formatSemesterLabel(selectedCourse.semester_term)}` : ""}${selectedCourse.semester_term && selectedCourse.credits !== undefined ? " · " : ""}${selectedCourse.credits !== undefined ? `${selectedCourse.credits} 學分` : ""}` || "已選擇課程"
+                            : "點擊載入並選擇欲評價之課程"}
                         </Text>
                       </View>
                       <Ionicons name="chevron-down" size={18} color="#9AD8ED" />
@@ -1379,9 +1460,9 @@ export default function MoodScreen() {
             <View style={[styles.modalContent, { height: "85%" }]}>
               <View style={styles.modalHeader}>
                 <View style={{ flex: 1, paddingRight: 10 }}>
-                  <Text style={styles.modalTitle}>選擇已修課程</Text>
+                  <Text style={styles.modalTitle}>選擇課程評價</Text>
                   <Text style={styles.modalSubtitle}>
-                    僅顯示學生資訊系統已通過之課程
+                    僅顯示純課程名稱（無班級與校區）
                   </Text>
                 </View>
                 <Pressable onPress={() => setCourseModalVisible(false)}>
@@ -1389,149 +1470,310 @@ export default function MoodScreen() {
                 </Pressable>
               </View>
 
-              {/* 頂部操作與統計列 */}
-              <View style={styles.modalToolRow}>
-                <Text style={styles.modalToolCount}>
-                  共 {myCourses.length} 門已通過課程
-                </Text>
+              {/* 🌟 課程搜尋框 */}
+              <View style={[styles.deptSearchRow, { marginHorizontal: 0, marginBottom: 10 }]}>
+                <Ionicons name="search" size={15} color="#9AD8ED" />
+                <TextInput
+                  style={styles.deptSearchInput}
+                  placeholder="搜尋課程名稱（例如：微積分、體育...）"
+                  placeholderTextColor="rgba(240,255,249,0.4)"
+                  value={rateCourseSearchQuery}
+                  onChangeText={setRateCourseSearchQuery}
+                  autoCapitalize="none"
+                />
+                {rateCourseSearchQuery.length > 0 && (
+                  <Pressable onPress={() => setRateCourseSearchQuery("")}>
+                    <Ionicons name="close-circle" size={16} color="#9AD8ED" />
+                  </Pressable>
+                )}
+              </View>
+
+              {/* 🌟 類別分頁切換列（已修通過 vs 全校課程庫） */}
+              <View style={{ flexDirection: "row", gap: 10, marginBottom: 12 }}>
                 <Pressable
-                  style={styles.syncBtnSmall}
-                  onPress={async () => {
-                    const stored = await AsyncStorage.getItem("current_user_id");
-                    setMcuAccount(stored || String(currentUserId));
-                    setSyncModalVisible(true);
-                  }}
-                  disabled={syncing}
+                  style={[
+                    styles.pill,
+                    rateCourseTab === "passed" && styles.pillActive,
+                    { flex: 1, alignItems: "center", justifyContent: "center" },
+                  ]}
+                  onPress={() => setRateCourseTab("passed")}
                 >
-                  {syncing ? (
-                    <ActivityIndicator size="small" color="#F2C14E" />
-                  ) : (
-                    <>
-                      <Ionicons name="sync" size={13} color="#F2C14E" />
-                      <Text style={styles.syncBtnTextSmall}>同步</Text>
-                    </>
-                  )}
+                  <Text
+                    style={[
+                      styles.pillText,
+                      rateCourseTab === "passed" && styles.pillTextActive,
+                    ]}
+                  >
+                    已修通過課程 ({myCourses.length})
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.pill,
+                    rateCourseTab === "all" && styles.pillActive,
+                    { flex: 1, alignItems: "center", justifyContent: "center" },
+                  ]}
+                  onPress={() => {
+                    setRateCourseTab("all");
+                    fetchAllCoursesForRating();
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.pillText,
+                      rateCourseTab === "all" && styles.pillTextActive,
+                    ]}
+                  >
+                    全校所有課程
+                  </Text>
                 </Pressable>
               </View>
 
-              {loadingMyCourses || syncing ? (
-                <View
-                  style={{
-                    flex: 1,
-                    justifyContent: "center",
-                    alignItems: "center",
-                    gap: 10,
-                  }}
-                >
-                  <ActivityIndicator size="large" color="#F2C14E" />
-                  <Text style={styles.panelCopy}>
-                    {syncing
-                      ? "正在爬取學生資訊系統已通過課程..."
-                      : "載入已修通過課程中..."}
-                  </Text>
-                </View>
-              ) : myCourses.length === 0 ? (
-                <View style={styles.emptyCoursesContainer}>
-                  <Ionicons
-                    name="school-outline"
-                    size={48}
-                    color="#9AD8ED"
-                  />
-                  <Text style={styles.emptyCoursesTitle}>
-                    沒有可評價課程
-                  </Text>
-                  <Text style={styles.emptyCoursesSubtitle}>
-                    尚未取得已通過之修課資料，請先同步校務成績。
-                  </Text>
+              {/* 頂部操作與統計列 */}
+              <View style={styles.modalToolRow}>
+                <Text style={styles.modalToolCount}>
+                  {rateCourseTab === "passed"
+                    ? `共 ${myCourses.length} 門已修課程`
+                    : `全校開課庫（純課程名稱去重）`}
+                </Text>
+                {rateCourseTab === "passed" && (
                   <Pressable
-                    style={styles.emptySyncBtn}
+                    style={styles.syncBtnSmall}
                     onPress={async () => {
                       const stored = await AsyncStorage.getItem("current_user_id");
                       setMcuAccount(stored || String(currentUserId));
                       setSyncModalVisible(true);
                     }}
+                    disabled={syncing}
                   >
-                    <Ionicons name="sync" size={16} color="#16445A" />
-                    <Text style={styles.emptySyncBtnText}>
-                      同步
-                    </Text>
+                    {syncing ? (
+                      <ActivityIndicator size="small" color="#F2C14E" />
+                    ) : (
+                      <>
+                        <Ionicons name="sync" size={13} color="#F2C14E" />
+                        <Text style={styles.syncBtnTextSmall}>同步</Text>
+                      </>
+                    )}
                   </Pressable>
-                </View>
-              ) : (
-                <ScrollView
-                  style={{ flex: 1 }}
-                  showsVerticalScrollIndicator={false}
-                >
-                  {myCourses.map((c, index) => {
-                    const teacherName =
-                      c.teacher &&
-                      c.teacher !== "專任教師" &&
-                      c.teacher !== "授課教師"
-                        ? c.teacher
-                        : "---";
+                )}
+              </View>
 
-                    return (
-                      <Pressable
-                        key={`${c.course_id}_${c.semester_term}_${index}`}
-                        style={[
-                          styles.courseSelectItem,
-                          selectedCourse?.course_id === c.course_id &&
-                            selectedCourse?.semester_term ===
-                              c.semester_term &&
-                            styles.courseSelectItemActive,
-                        ]}
-                        onPress={() => {
-                          setSelectedCourse(c);
-                          setCourseModalVisible(false);
-                        }}
-                      >
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            justifyContent: "space-between",
-                            marginBottom: 4,
-                          }}
-                        >
-                          <Text style={styles.courseSelectName}>
-                            {c.course_name}
-                          </Text>
-                          {c.semester_term ? (
-                            <View style={styles.semesterBadge}>
-                              <Text style={styles.semesterBadgeText}>
-                                {c.semester_term}
+              {/* 列表內容展示 */}
+              {rateCourseTab === "passed" ? (
+                loadingMyCourses || syncing ? (
+                  <View
+                    style={{
+                      flex: 1,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <ActivityIndicator size="large" color="#F2C14E" />
+                    <Text style={styles.panelCopy}>
+                      {syncing
+                        ? "正在爬取學生資訊系統已通過課程..."
+                        : "載入已修通過課程中..."}
+                    </Text>
+                  </View>
+                ) : myCourses.length === 0 ? (
+                  <View style={styles.emptyCoursesContainer}>
+                    <Ionicons
+                      name="school-outline"
+                      size={48}
+                      color="#9AD8ED"
+                    />
+                    <Text style={styles.emptyCoursesTitle}>
+                      尚未同步已通過課程
+                    </Text>
+                    <Text style={styles.emptyCoursesSubtitle}>
+                      你可以同步校務成績，或直接切換至「全校所有課程」標籤為任何課程評分。
+                    </Text>
+                    <Pressable
+                      style={styles.emptySyncBtn}
+                      onPress={() => {
+                        setRateCourseTab("all");
+                        fetchAllCoursesForRating();
+                      }}
+                    >
+                      <Ionicons name="list" size={16} color="#16445A" />
+                      <Text style={styles.emptySyncBtnText}>
+                        查看全校課程進行評價
+                      </Text>
+                    </Pressable>
+                  </View>
+                ) : (
+                  <ScrollView
+                    style={{ flex: 1 }}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {myCourses
+                      .filter((c) =>
+                        rateCourseSearchQuery.trim() === ""
+                          ? true
+                          : cleanCourseName(c.course_name)
+                              .toLowerCase()
+                              .includes(rateCourseSearchQuery.trim().toLowerCase())
+                      )
+                      .map((c, index) => {
+                        const pureName = cleanCourseName(c.course_name);
+
+                        return (
+                          <Pressable
+                            key={`${c.course_id}_${c.semester_term}_${index}`}
+                            style={[
+                              styles.courseSelectItem,
+                              selectedCourse?.course_id === c.course_id &&
+                                selectedCourse?.semester_term ===
+                                  c.semester_term &&
+                                styles.courseSelectItemActive,
+                            ]}
+                            onPress={() => {
+                              setSelectedCourse({
+                                ...c,
+                                course_name: pureName,
+                                class_name: undefined,
+                                classroom: undefined,
+                              });
+                              setCourseModalVisible(false);
+                            }}
+                          >
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                marginBottom: 4,
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.courseSelectName,
+                                  { flex: 1, marginRight: 8 },
+                                ]}
+                              >
+                                {pureName}
                               </Text>
+                              {c.semester_term ? (
+                                <View style={styles.semesterBadge}>
+                                  <Text style={styles.semesterBadgeText}>
+                                    {formatSemesterLabel(c.semester_term)}
+                                  </Text>
+                                </View>
+                              ) : null}
                             </View>
-                          ) : null}
-                        </View>
-                        <View
-                          style={{
-                            flexDirection: "row",
-                            alignItems: "center",
-                            flexWrap: "wrap",
-                            gap: 6,
-                          }}
-                        >
-                          <Text style={styles.courseSelectDetail}>
-                            教師：{teacherName} ·{" "}
-                            {c.department || "系所"} (
-                            {c.category || "必修"})
-                          </Text>
-                          {c.credits !== undefined ? (
-                            <Text style={styles.courseSelectDetail}>
-                              · {c.credits} 學分
-                            </Text>
-                          ) : null}
-                          <View style={styles.passedBadge}>
-                            <Text style={styles.passedBadgeText}>
-                              通過
-                            </Text>
-                          </View>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
+                            {c.credits !== undefined ? (
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  alignItems: "center",
+                                }}
+                              >
+                                <Text style={styles.courseSelectDetail}>
+                                  {c.credits} 學分
+                                </Text>
+                              </View>
+                            ) : null}
+                          </Pressable>
+                        );
+                      })}
+                  </ScrollView>
+                )
+              ) : (
+                /* 全校所有課程分頁（完全純課名，絕無班級與校區） */
+                loadingAllCoursesForRating ? (
+                  <View
+                    style={{
+                      flex: 1,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <ActivityIndicator size="large" color="#F2C14E" />
+                    <Text style={styles.panelCopy}>載入全校評價課程中...</Text>
+                  </View>
+                ) : (
+                  <ScrollView
+                    style={{ flex: 1 }}
+                    showsVerticalScrollIndicator={false}
+                  >
+                    {allCoursesForRating
+                      .filter((c) =>
+                        rateCourseSearchQuery.trim() === ""
+                          ? true
+                          : cleanCourseName(c.course_name)
+                              .toLowerCase()
+                              .includes(rateCourseSearchQuery.trim().toLowerCase())
+                      )
+                      .map((c, index) => {
+                        const pureName = cleanCourseName(c.course_name);
+                        const teacherName =
+                          c.teacher &&
+                          c.teacher !== "專任教師" &&
+                          c.teacher !== "授課教師"
+                            ? c.teacher
+                            : "---";
+
+                        return (
+                          <Pressable
+                            key={`${c.course_id}_${index}`}
+                            style={[
+                              styles.courseSelectItem,
+                              selectedCourse?.course_id === c.course_id &&
+                                styles.courseSelectItemActive,
+                            ]}
+                            onPress={() => {
+                              setSelectedCourse({
+                                ...c,
+                                course_name: pureName,
+                                class_name: undefined,
+                                classroom: undefined,
+                              });
+                              setCourseModalVisible(false);
+                            }}
+                          >
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                marginBottom: 4,
+                              }}
+                            >
+                              <Text style={styles.courseSelectName}>
+                                {pureName}
+                              </Text>
+                              <View style={styles.semesterBadge}>
+                                <Text style={styles.semesterBadgeText}>
+                                  {c.category || "全校"}
+                                </Text>
+                              </View>
+                            </View>
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                alignItems: "center",
+                                flexWrap: "wrap",
+                                gap: 6,
+                              }}
+                            >
+                              <Text style={styles.courseSelectDetail}>
+                                教師：{teacherName} ·{" "}
+                                {cleanDepartment(c.department)} ·{" "}
+                                {c.grade || "大學部"}
+                              </Text>
+                              {c.credits !== undefined ? (
+                                <Text style={styles.courseSelectDetail}>
+                                  · {c.credits} 學分
+                                </Text>
+                              ) : null}
+                            </View>
+                          </Pressable>
+                        );
+                      })}
+                  </ScrollView>
+                )
               )}
               {/* 🌟 內嵌同步覆蓋層（避免 iOS/Android 雙重原生 Modal 衝突導致點擊無反應） */}
               {syncModalVisible && (
@@ -1669,7 +1911,7 @@ export default function MoodScreen() {
               <View style={styles.modalHeader}>
                 <View style={{ flex: 1, paddingRight: 10 }}>
                   <Text style={styles.modalTitle} numberOfLines={1}>
-                    {selectedReviewCourse?.course_name}
+                    {cleanCourseName(selectedReviewCourse?.course_name)}
                   </Text>
                   <Text style={styles.modalSubtitle}>
                     {detailModalMode === "details"
@@ -1691,16 +1933,19 @@ export default function MoodScreen() {
                       {selectedReviewCourse?.teacher || "---"}
                     </Text>
                   </View>
-                  <View style={styles.courseDetailItem}>
-                    <Text style={styles.courseDetailLabel}>開課班級</Text>
-                    <Text style={styles.courseDetailVal}>
-                      {selectedReviewCourse?.class_name || "---"}
-                    </Text>
-                  </View>
+                  {/* 🌟 只有「查看課程詳細資訊」才顯示開課班級；「課程評價」不顯示班級 */}
+                  {detailModalMode === "details" && (
+                    <View style={styles.courseDetailItem}>
+                      <Text style={styles.courseDetailLabel}>開課班級</Text>
+                      <Text style={styles.courseDetailVal}>
+                        {selectedReviewCourse?.class_name || "---"}
+                      </Text>
+                    </View>
+                  )}
                   <View style={styles.courseDetailItem}>
                     <Text style={styles.courseDetailLabel}>開課系所</Text>
                     <Text style={styles.courseDetailVal}>
-                      {selectedReviewCourse?.department || "全校"}
+                      {cleanDepartment(selectedReviewCourse?.department) || "全校"}
                     </Text>
                   </View>
                   <View style={styles.courseDetailItem}>
@@ -1718,16 +1963,18 @@ export default function MoodScreen() {
                         : "3 學分"}
                     </Text>
                   </View>
-                  <View style={styles.courseDetailItem}>
-                    <Text style={styles.courseDetailLabel}>選課/開班人數</Text>
-                    <Text style={styles.courseDetailVal}>
-                      {selectedReviewCourse?.enrolled !== undefined &&
-                      selectedReviewCourse?.capacity !== undefined
-                        ? `${selectedReviewCourse.enrolled} / ${selectedReviewCourse.capacity}`
-                        : "---"}
-                    </Text>
-                  </View>
-                  {Boolean(selectedReviewCourse?.schedule) && (
+                  {detailModalMode === "details" && (
+                    <View style={styles.courseDetailItem}>
+                      <Text style={styles.courseDetailLabel}>選課/開班人數</Text>
+                      <Text style={styles.courseDetailVal}>
+                        {selectedReviewCourse?.enrolled !== undefined &&
+                        selectedReviewCourse?.capacity !== undefined
+                          ? `${selectedReviewCourse.enrolled} / ${selectedReviewCourse.capacity}`
+                          : "---"}
+                      </Text>
+                    </View>
+                  )}
+                  {detailModalMode === "details" && Boolean(selectedReviewCourse?.schedule) && (
                     <View style={[styles.courseDetailItem, { width: "100%" }]}>
                       <Text style={styles.courseDetailLabel}>上課時間 / 節次</Text>
                       <Text style={styles.courseDetailVal}>
@@ -1735,7 +1982,8 @@ export default function MoodScreen() {
                       </Text>
                     </View>
                   )}
-                  {Boolean(selectedReviewCourse?.classroom) && (
+                  {/* 🌟 只有「查看課程詳細資訊」才顯示教室/校區地點；「課程評價」不顯示校區 */}
+                  {detailModalMode === "details" && Boolean(selectedReviewCourse?.classroom) && (
                     <View style={[styles.courseDetailItem, { width: "100%" }]}>
                       <Text style={styles.courseDetailLabel}>教室 / 地點</Text>
                       <Text style={styles.courseDetailVal}>
