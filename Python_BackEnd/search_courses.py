@@ -29,6 +29,7 @@ def search_from_sqlite(
     dept: Optional[str] = None,
     grade: Optional[str] = None,
     category: Optional[str] = None,
+    campus: Optional[str] = None,
     keyword: Optional[str] = None,
     teacher: Optional[str] = None,
     limit: int = 50,
@@ -45,9 +46,12 @@ def search_from_sqlite(
     params = []
 
     if dept and dept != "全部":
-        clean_dept = dept.replace("學系", "").replace("系", "").replace("中心", "").strip()
-        conditions.append("(department LIKE ? OR department LIKE ?)")
-        params.extend([f"%{dept}%", f"%{clean_dept}%"])
+        if dept in ["通識教育中心", "全校通識"]:
+            conditions.append("(department LIKE '%通識%' OR category = '通識')")
+        else:
+            clean_dept = dept.replace("學系", "").replace("系", "").replace("中心", "").strip()
+            conditions.append("(department LIKE ? OR department LIKE ?)")
+            params.extend([f"%{dept}%", f"%{clean_dept}%"])
 
     if grade and grade != "全部":
         grade_map = {
@@ -68,6 +72,14 @@ def search_from_sqlite(
     if category and category != "全部":
         conditions.append("category = ?")
         params.append(category)
+
+    if campus and campus not in ["全部", "全部校區"]:
+        clean_campus = campus.replace("校區", "").strip()
+        if clean_campus in ["基和", "基河"]:
+            conditions.append("(campus LIKE '%基河%' OR classroom LIKE '%基河%' OR classroom LIKE '%基和%')")
+        else:
+            conditions.append("(campus LIKE ? OR classroom LIKE ?)")
+            params.extend([f"%{clean_campus}%", f"%{clean_campus}%"])
 
     if teacher:
         conditions.append("teacher LIKE ?")
@@ -93,6 +105,7 @@ def search_from_mongo(
     dept: Optional[str] = None,
     grade: Optional[str] = None,
     category: Optional[str] = None,
+    campus: Optional[str] = None,
     keyword: Optional[str] = None,
     teacher: Optional[str] = None,
     limit: int = 50,
@@ -107,14 +120,24 @@ def search_from_mongo(
         conditions = []
 
         if dept and dept != "全部":
-            clean_dept = dept.replace("學系", "").replace("系", "").replace("中心", "").strip()
-            conditions.append({
-                "$or": [
-                    {"department": dept},
-                    {"department": {"$regex": clean_dept, "$options": "i"}},
-                    {"domain": {"$regex": clean_dept, "$options": "i"}},
-                ]
-            })
+            if dept in ["通識教育中心", "全校通識"]:
+                conditions.append({
+                    "$or": [
+                        {"department": "通識教育中心"},
+                        {"department": "全校通識"},
+                        {"department": {"$regex": "通識", "$options": "i"}},
+                        {"category": "通識"},
+                    ]
+                })
+            else:
+                clean_dept = dept.replace("學系", "").replace("系", "").replace("中心", "").strip()
+                conditions.append({
+                    "$or": [
+                        {"department": dept},
+                        {"department": {"$regex": clean_dept, "$options": "i"}},
+                        {"domain": {"$regex": clean_dept, "$options": "i"}},
+                    ]
+                })
 
         if grade and grade != "全部":
             grade_map = {
@@ -137,6 +160,25 @@ def search_from_mongo(
 
         if category and category != "全部":
             conditions.append({"category": category})
+
+        if campus and campus not in ["全部", "全部校區"]:
+            clean_campus = campus.replace("校區", "").strip()
+            if clean_campus in ["基和", "基河"]:
+                conditions.append({
+                    "$or": [
+                        {"campus": "基河"},
+                        {"campus": "基和"},
+                        {"classroom": {"$regex": "基[河和]", "$options": "i"}},
+                    ]
+                })
+            else:
+                conditions.append({
+                    "$or": [
+                        {"campus": clean_campus},
+                        {"campus": {"$regex": clean_campus, "$options": "i"}},
+                        {"classroom": {"$regex": clean_campus, "$options": "i"}},
+                    ]
+                })
 
         if teacher:
             conditions.append({"teacher": {"$regex": teacher, "$options": "i"}})

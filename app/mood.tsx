@@ -55,63 +55,179 @@ type Evaluation = {
   evaluation_status: string;
 };
 
-type Panel = "rate" | "quiz" | "reviews" | "details" | "reminder" | null;
+type Panel = "rate" | "quiz" | "details" | "reminder" | null;
+
+// 銘傳大學官方科系代碼對照表（依科系代碼排序）
+export const MCU_DEPT_CODES: Record<string, string> = {
+  "通識教育中心": "00",
+  "全校通識": "00",
+  "外語教學中心": "01",
+  "英語教學中心": "01",
+  "體育室": "02",
+  "數位媒體設計學系": "09",
+  "數位媒體設計系": "09",
+  "師資培育中心": "10",
+  "企業管理學系": "11",
+  "資訊管理學系": "13",
+  "觀光事業學系": "14",
+  "影音新聞暨社群傳播學系": "15",
+  "新聞學系": "15",
+  "應用統計與資料科學學系": "17",
+  "休閒遊憩管理學系": "18",
+  "餐旅管理學系": "19",
+  "商業設計學系": "21",
+  "商品設計學系": "23",
+  "建築學系": "24",
+  "廣告暨策略行銷學系": "26",
+  "新聞與大眾傳播學士學位學程": "27",
+  "強化體能健康促進學分學程": "28",
+  "傳播學院全媒體大一不分系學士班": "30",
+  "傳播學院全媒體學士學位學程": "30",
+  "新媒體暨傳播管理學系": "31",
+  "廣播電視學系": "32",
+  "資訊工程學系": "36",
+  "資訊傳播工程學系": "37",
+  "犯罪防治學系": "38",
+  "生物科技學系": "39",
+  "醫療資訊與管理學系": "40",
+  "法律學系": "41",
+  "應用英語學系": "42",
+  "應用日語學系": "44",
+  "金融科技應用學士學位學程": "46",
+  "旅遊與觀光學士學位學程": "48",
+  "觀光學士學位學程": "48",
+  "會計學系": "52",
+  "資訊應用與金融保險學系": "53",
+  "風險管理與保險學系": "53",
+  "財務金融學系": "54",
+  "國際企業學系": "57",
+  "國際事務與外交學士學位學程": "59",
+  "諮商臨床與工商心理學系": "60",
+  "諮商臨床與工商心理學系碩士班諮商心理學組": "61",
+  "諮商臨床與工商心理學系碩士班臨床心理學組": "62",
+  "金融學系": "64",
+  "經濟與金融學系": "64",
+  "財金法律學系": "65",
+  "生物醫學工程學系": "67",
+  "公共事務與行政管理學系": "68",
+  "高階經理碩士在職學位學程": "70",
+  "金融智慧與永續未來學分學程": "72",
+  "都市設計與永續發展學系": "74",
+  "都市規劃與防災學系": "74",
+  "人工智慧應用學系": "75",
+  "半導體應用學士學位學程": "76",
+  "動漫文創設計學士學位學程": "78",
+  "應用中文與華語文教學系": "79",
+  "應用中國文學系": "79",
+  "華語文教學學系": "79",
+  "工商管理學士學位學程泰國境外專班": "81",
+  "電腦與通訊工程學系": "82",
+  "電子工程學系": "83",
+  "教育研究所": "83",
+  "電機工程學系": "84",
+  "金融科技應用學系": "86",
+  "時尚與創新管理學士學位學程": "88",
+  "資訊科技應用與管理學士學位學程": "89",
+  "資訊科技應用學士學位學程": "89",
+  "國際事務碩士學位學程": "90",
+  "國際企業與貿易學士學位學程": "91",
+  "國際企業學士學位學程": "91",
+  "流行音樂與舞蹈學士學位學程": "92",
+  "金融科技碩士學位學程": "96",
+  "國防行政管理進修學士學位學程": "98",
+  "國際班": "99",
+  "金門校區(不分系所)": "KM",
+};
+
+export const getDeptCode = (deptName: string): string => {
+  if (!deptName || deptName === "全部") return "";
+  return MCU_DEPT_CODES[deptName] || "999";
+};
+
+export const sortDepartmentsByCode = (depts: string[]): string[] => {
+  const filtered = Array.from(new Set(depts.filter((d) => Boolean(d) && d !== "全部")));
+  filtered.sort((a, b) => {
+    const codeA = getDeptCode(a);
+    const codeB = getDeptCode(b);
+    if (codeA !== codeB) {
+      return codeA.localeCompare(codeB, undefined, { numeric: true });
+    }
+    return a.localeCompare(b, "zh-Hant");
+  });
+  return ["全部", ...filtered];
+};
 
 const DEPARTMENTS = [
   "全部",
-  "全校通識",
+  "通識教育中心",
+  "外語教學中心",
   "體育室",
-  "英語教學中心",
-  "資訊工程學系",
-  "資訊管理學系",
-  "資訊傳播工程學系",
-  "電腦與通訊工程學系",
-  "電子工程學系",
-  "電機工程學系",
-  "人工智慧應用學系",
-  "半導體應用學士學位學程",
-  "商業設計學系",
-  "商品設計學系",
-  "數位媒體設計系",
-  "建築學系",
-  "都市規劃與防災學系",
-  "動漫文創設計學士學位學程",
+  "數位媒體設計學系",
+  "師資培育中心",
   "企業管理學系",
-  "國際企業學系",
-  "財務金融學系",
-  "風險管理與保險學系",
-  "會計學系",
-  "經濟與金融學系",
-  "應用統計與資料科學學系",
-  "金融科技應用學士學位學程",
-  "新聞學系",
-  "廣播電視學系",
-  "廣告暨策略行銷學系",
-  "新媒體暨傳播管理學系",
-  "傳播學院全媒體學士學位學程",
+  "資訊管理學系",
   "觀光事業學系",
+  "影音新聞暨社群傳播學系",
+  "應用統計與資料科學學系",
   "休閒遊憩管理學系",
   "餐旅管理學系",
-  "應用中國文學系",
-  "應用英語學系",
-  "應用日語學系",
-  "華語文教學學系",
-  "法律學系",
-  "財金法律學系",
-  "公共事務與行政管理學系",
-  "諮商臨床與工商心理學系",
+  "商業設計學系",
+  "商品設計學系",
+  "建築學系",
+  "廣告暨策略行銷學系",
+  "新聞與大眾傳播學士學位學程",
+  "強化體能健康促進學分學程",
+  "傳播學院全媒體大一不分系學士班",
+  "新媒體暨傳播管理學系",
+  "廣播電視學系",
+  "資訊工程學系",
+  "資訊傳播工程學系",
   "犯罪防治學系",
   "生物科技學系",
   "醫療資訊與管理學系",
+  "法律學系",
+  "應用英語學系",
+  "應用日語學系",
+  "金融科技應用學士學位學程",
+  "旅遊與觀光學士學位學程",
+  "會計學系",
+  "資訊應用與金融保險學系",
+  "財務金融學系",
+  "國際企業學系",
+  "國際事務與外交學士學位學程",
+  "諮商臨床與工商心理學系",
+  "諮商臨床與工商心理學系碩士班諮商心理學組",
+  "諮商臨床與工商心理學系碩士班臨床心理學組",
+  "金融學系",
+  "財金法律學系",
   "生物醫學工程學系",
-  "國際企業學士學位學程",
-  "新聞與大眾傳播學士學位學程",
-  "觀光學士學位學程",
-  "資訊科技應用學士學位學程",
+  "公共事務與行政管理學系",
+  "高階經理碩士在職學位學程",
+  "金融智慧與永續未來學分學程",
+  "都市設計與永續發展學系",
+  "人工智慧應用學系",
+  "半導體應用學士學位學程",
+  "動漫文創設計學士學位學程",
+  "應用中文與華語文教學系",
+  "工商管理學士學位學程泰國境外專班",
+  "電腦與通訊工程學系",
+  "電子工程學系",
+  "教育研究所",
+  "電機工程學系",
+  "金融科技應用學系",
+  "時尚與創新管理學士學位學程",
+  "資訊科技應用與管理學士學位學程",
+  "國際事務碩士學位學程",
+  "國際企業與貿易學士學位學程",
   "流行音樂與舞蹈學士學位學程",
+  "金融科技碩士學位學程",
+  "國防行政管理進修學士學位學程",
+  "國際班",
+  "金門校區(不分系所)",
 ];
 const GRADES = ["全部", "大一", "大二", "大三", "大四"];
-const CATEGORIES = ["全部", "必修", "選修", "通識"];
+const CATEGORIES = ["全部", "必修", "選修"];
+const CAMPUS_OPTIONS = ["全部", "台北校區", "桃園校區", "基河校區"];
 
 const defaultCourses = [
   {
@@ -243,24 +359,17 @@ export default function MoodScreen() {
     initUserId();
   }, []);
 
-  // 檢索：篩選條件與搜尋出的全校課程清單
-  const [filterDept, setFilterDept] = useState<string>("全部");
-  const [filterGrade, setFilterGrade] = useState<string>("全部");
-  const [filterCategory, setFilterCategory] = useState<string>("全部");
+  // 系所清單
   const [departmentList, setDepartmentList] = useState<string[]>(DEPARTMENTS);
-  const [deptDropdownOpen, setDeptDropdownOpen] = useState<boolean>(false);
-  const [deptSearchQuery, setDeptSearchQuery] = useState<string>("");
-  const [searchedCourses, setSearchedCourses] = useState<CourseItem[]>([]);
-  const [loadingCourses, setLoadingCourses] = useState<boolean>(false);
 
-  // 取得後端所有系所清單（若後端有其他系所則自動合併）
+  // 取得後端所有系所清單（依照銘傳大學科系代號排序）
   useEffect(() => {
     const fetchDepts = async () => {
       try {
         const res = await fetch(`${baseUrl}/api/courses/departments`);
         const json = await res.json();
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-          setDepartmentList(json.data);
+          setDepartmentList(sortDepartmentsByCode(json.data));
         }
       } catch {}
     };
@@ -277,10 +386,11 @@ export default function MoodScreen() {
   const [reviewTotalCount, setReviewTotalCount] = useState<number>(0);
   const [loadingReviews, setLoadingReviews] = useState<boolean>(false);
   const [detailModalMode, setDetailModalMode] =
-    useState<"details" | "reviews">("reviews");
+    useState<"details" | "reviews">("details");
 
   // 查看課程詳細資訊檢索：篩選條件與搜尋課程清單
   const [detailsFilterDept, setDetailsFilterDept] = useState<string>("全部");
+  const [detailsFilterCampus, setDetailsFilterCampus] = useState<string>("全部");
   const [detailsFilterGrade, setDetailsFilterGrade] = useState<string>("全部");
   const [detailsFilterCategory, setDetailsFilterCategory] =
     useState<string>("全部");
@@ -422,31 +532,6 @@ export default function MoodScreen() {
 
 
 
-  // 依條件搜尋課程清單（純課程卡片）
-  const fetchFilteredCourses = async (
-    dept = filterDept,
-    grade = filterGrade,
-    category = filterCategory
-  ) => {
-    try {
-      setLoadingCourses(true);
-      const url = `${baseUrl}/api/courses/search?department=${encodeURIComponent(
-        dept
-      )}&grade=${encodeURIComponent(grade)}&category=${encodeURIComponent(
-        category
-      )}&distinct_by_name=true`;
-      const res = await fetch(url);
-      const json = await res.json();
-      if (json.success) {
-        setSearchedCourses(json.data);
-      }
-    } catch (err) {
-      console.error("篩選課程失敗:", err);
-    } finally {
-      setLoadingCourses(false);
-    }
-  };
-
   // 抓取特定課程評價（每頁 20 筆分頁）
   const fetchCourseReviewsPage = async (courseId: number | string, page: number) => {
     try {
@@ -467,26 +552,21 @@ export default function MoodScreen() {
     }
   };
 
-  const handleOpenCourseReviews = (course: CourseItem) => {
-    setSelectedReviewCourse(course);
-    setDetailModalMode("reviews");
-    setReviewPage(1);
-    setCourseReviews([]);
-    setReviewModalVisible(true);
-    fetchCourseReviewsPage(course.course_id, 1);
-  };
-
   // 查看課程詳細資訊：依條件搜尋課程清單
   const fetchDetailsCourses = async (
     dept = detailsFilterDept,
     grade = detailsFilterGrade,
-    category = detailsFilterCategory
+    category = detailsFilterCategory,
+    campus = detailsFilterCampus
   ) => {
     try {
       setLoadingDetailsCourses(true);
-      const url = `${baseUrl}/api/courses/search?department=${encodeURIComponent(
+      let url = `${baseUrl}/api/courses/search?department=${encodeURIComponent(
         dept
       )}&grade=${encodeURIComponent(grade)}&category=${encodeURIComponent(category)}`;
+      if (dept === "通識教育中心" && campus && campus !== "全部") {
+        url += `&campus=${encodeURIComponent(campus)}`;
+      }
       const res = await fetch(url);
       const json = await res.json();
       if (json.success) {
@@ -528,15 +608,12 @@ export default function MoodScreen() {
       setQuizAnswers([]);
     }
 
-    if (nextPanel === "reviews") {
-      fetchFilteredCourses(filterDept, filterGrade, filterCategory);
-    }
-
     if (nextPanel === "details") {
       fetchDetailsCourses(
         detailsFilterDept,
         detailsFilterGrade,
-        detailsFilterCategory
+        detailsFilterCategory,
+        detailsFilterCampus
       );
     }
 
@@ -550,14 +627,11 @@ export default function MoodScreen() {
         case "quiz":
           yOffset = 250;
           break;
-        case "reviews":
+        case "details":
           yOffset = 335;
           break;
-        case "details":
-          yOffset = 420;
-          break;
         case "reminder":
-          yOffset = 505;
+          yOffset = 420;
           break;
       }
       scrollViewRef.current?.scrollTo({ y: yOffset, animated: true });
@@ -608,8 +682,7 @@ export default function MoodScreen() {
         setEasiness(0);
         setGains(0);
         setComment("");
-        setPanel("reviews");
-        fetchFilteredCourses(filterDept, filterGrade, filterCategory);
+        setPanel(null);
       } else {
         Alert.alert("送出失敗", json.message || "評價無法記錄。");
       }
@@ -848,263 +921,6 @@ export default function MoodScreen() {
                   </View>
                   <View>
                     <Action
-                      title="查看結構化課程評價"
-                      detail="依系所、年級、必選修精準搜尋"
-                      icon="bar-chart-outline"
-                      color="#9AD8ED"
-                      expanded={panel === "reviews"}
-                      onPress={() => openPanel("reviews")}
-                    />
-                    {/* 2. 結構化課程評價面板 */}
-                {panel === "reviews" && (
-                  <View style={styles.panel}>
-                    <View style={styles.panelHeader}>
-                      <Text style={styles.panelTitle}>結構化課程評價檢索</Text>
-                      
-                    </View>
-
-                    <Text style={styles.filterTitle}>系所別</Text>
-                    {/* 下拉式選單觸發按鈕 */}
-                    <Pressable
-                      style={styles.deptDropdownTrigger}
-                      onPress={() => setDeptDropdownOpen(!deptDropdownOpen)}
-                    >
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 8,
-                          flex: 1,
-                        }}
-                      >
-                        <Ionicons
-                          name="school-outline"
-                          size={16}
-                          color="#F2C14E"
-                        />
-                        <Text style={styles.deptDropdownSelectedText}>
-                          {filterDept === "全部" ? "全部系所" : filterDept}
-                        </Text>
-                      </View>
-                      <Ionicons
-                        name={deptDropdownOpen ? "chevron-up" : "chevron-down"}
-                        size={18}
-                        color="#9AD8ED"
-                      />
-                    </Pressable>
-
-                    {/* 下拉式選單內容列表（展開時顯示） */}
-                    {deptDropdownOpen && (
-                      <View style={styles.deptDropdownMenu}>
-                        {/* 快速搜尋過濾框 */}
-                        <View style={styles.deptSearchRow}>
-                          <Ionicons name="search" size={15} color="#9AD8ED" />
-                          <TextInput
-                            style={styles.deptSearchInput}
-                            placeholder="快速搜尋系所（例如：資管、設計...）"
-                            placeholderTextColor="rgba(240,255,249,0.4)"
-                            value={deptSearchQuery}
-                            onChangeText={setDeptSearchQuery}
-                            autoCapitalize="none"
-                          />
-                          {deptSearchQuery.length > 0 && (
-                            <Pressable onPress={() => setDeptSearchQuery("")}>
-                              <Ionicons
-                                name="close-circle"
-                                size={16}
-                                color="#9AD8ED"
-                              />
-                            </Pressable>
-                          )}
-                        </View>
-
-                        {/* 可滾動所有系所項目清單 */}
-                        <ScrollView
-                          style={{ maxHeight: 220 }}
-                          nestedScrollEnabled={true}
-                          showsVerticalScrollIndicator={true}
-                          keyboardShouldPersistTaps="handled"
-                        >
-                          {departmentList
-                            .filter((d) =>
-                              deptSearchQuery.trim() === ""
-                                ? true
-                                : d
-                                    .toLowerCase()
-                                    .includes(
-                                      deptSearchQuery.trim().toLowerCase()
-                                    )
-                            )
-                            .map((dept) => {
-                              const isSelected = filterDept === dept;
-                              return (
-                                <Pressable
-                                  key={dept}
-                                  style={[
-                                    styles.deptDropdownItem,
-                                    isSelected && styles.deptDropdownItemActive,
-                                  ]}
-                                  onPress={() => {
-                                    setFilterDept(dept);
-                                    setDeptDropdownOpen(false);
-                                    setDeptSearchQuery("");
-                                    fetchFilteredCourses(
-                                      dept,
-                                      filterGrade,
-                                      filterCategory
-                                    );
-                                  }}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.deptDropdownItemText,
-                                      isSelected &&
-                                        styles.deptDropdownItemTextActive,
-                                    ]}
-                                  >
-                                    {dept}
-                                  </Text>
-                                  {isSelected && (
-                                    <Ionicons
-                                      name="checkmark-circle"
-                                      size={16}
-                                      color="#16445A"
-                                    />
-                                  )}
-                                </Pressable>
-                              );
-                            })}
-                        </ScrollView>
-                      </View>
-                    )}
-
-                    <Text style={styles.filterTitle}>年級</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.pillRow}
-                    >
-                      {GRADES.map((g) => (
-                        <Pressable
-                          key={g}
-                          style={[
-                            styles.pill,
-                            filterGrade === g && styles.pillActive,
-                          ]}
-                          onPress={() => {
-                            setFilterGrade(g);
-                            fetchFilteredCourses(filterDept, g, filterCategory);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.pillText,
-                              filterGrade === g && styles.pillTextActive,
-                            ]}
-                          >
-                            {g}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-
-                    <Text style={styles.filterTitle}>修別</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.pillRow}
-                    >
-                      {CATEGORIES.map((cat) => (
-                        <Pressable
-                          key={cat}
-                          style={[
-                            styles.pill,
-                            filterCategory === cat && styles.pillActive,
-                          ]}
-                          onPress={() => {
-                            setFilterCategory(cat);
-                            fetchFilteredCourses(filterDept, filterGrade, cat);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.pillText,
-                              filterCategory === cat && styles.pillTextActive,
-                            ]}
-                          >
-                            {cat}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-
-                    <View style={styles.divider} />
-
-                    {loadingCourses ? (
-                      <Text
-                        style={[
-                          styles.panelCopy,
-                          { textAlign: "center", paddingVertical: 18 },
-                        ]}
-                      >
-                        正在篩選符合的課程...
-                      </Text>
-                    ) : searchedCourses.length === 0 ? (
-                      <Text
-                        style={[
-                          styles.panelCopy,
-                          { textAlign: "center", paddingVertical: 18 },
-                        ]}
-                      >
-                        沒有符合此條件的課程。
-                      </Text>
-                    ) : (
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.courseListHint}>
-                          點擊課程即可查看詳細評價：
-                        </Text>
-                        <ScrollView
-                          style={{ maxHeight: 280 }}
-                          contentContainerStyle={{ gap: 10, paddingBottom: 10 }}
-                          nestedScrollEnabled={true}
-                          showsVerticalScrollIndicator={true}
-                        >
-                          {searchedCourses.map((course, index) => (
-                            <Pressable
-                              key={`${course.course_id}_${course.class_code || index}`}
-                              style={styles.courseSelectCard}
-                              onPress={() => handleOpenCourseReviews(course)}
-                            >
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.courseCardName}>
-                                  {course.course_name}
-                                </Text>
-                                <Text style={styles.courseCardMeta}>
-                                  {course.teacher || "授課教師"} ·{" "}
-                                  {course.department || "系所"} ·{" "}
-                                  {course.grade || "年級"} ·{" "}
-                                  {course.category || "修別"}
-                                </Text>
-                              </View>
-                              <View style={styles.viewBadge}>
-                                <Ionicons
-                                  name="chevron-forward"
-                                  size={15}
-                                  color="#ffffff"
-                                />
-                              </View>
-                            </Pressable>
-                          ))}
-                        </ScrollView>
-                      </View>
-                    )}
-                  </View>
-                )}
-
-                
-                  </View>
-                  <View>
-                    <Action
                       title="查看課程詳細資訊"
                       detail="了解教師、時間與課程內容"
                       icon="information-circle-outline"
@@ -1143,6 +959,8 @@ export default function MoodScreen() {
                         <Text style={styles.deptDropdownSelectedText}>
                           {detailsFilterDept === "全部"
                             ? "全部系所"
+                            : getDeptCode(detailsFilterDept)
+                            ? `${getDeptCode(detailsFilterDept)} - ${detailsFilterDept}`
                             : detailsFilterDept}
                         </Text>
                       </View>
@@ -1165,7 +983,7 @@ export default function MoodScreen() {
                           <Ionicons name="search" size={15} color="#9AD8ED" />
                           <TextInput
                             style={styles.deptSearchInput}
-                            placeholder="快速搜尋系所（例如：資管、設計...）"
+                            placeholder="快速搜尋系所（例如：00、資管、通識...）"
                             placeholderTextColor="rgba(240,255,249,0.4)"
                             value={detailsDeptSearchQuery}
                             onChangeText={setDetailsDeptSearchQuery}
@@ -1184,7 +1002,7 @@ export default function MoodScreen() {
                           )}
                         </View>
 
-                        {/* 可滾動所有系所項目清單 */}
+                        {/* 可滾動所有系所項目清單（依銘傳大學科系代號排序） */}
                         <ScrollView
                           style={{ maxHeight: 220 }}
                           nestedScrollEnabled={true}
@@ -1192,19 +1010,17 @@ export default function MoodScreen() {
                           keyboardShouldPersistTaps="handled"
                         >
                           {departmentList
-                            .filter((d) =>
-                              detailsDeptSearchQuery.trim() === ""
-                                ? true
-                                : d
-                                    .toLowerCase()
-                                    .includes(
-                                      detailsDeptSearchQuery
-                                        .trim()
-                                        .toLowerCase()
-                                    )
-                            )
+                            .filter((d) => {
+                              if (detailsDeptSearchQuery.trim() === "") return true;
+                              const q = detailsDeptSearchQuery.trim().toLowerCase();
+                              return (
+                                d.toLowerCase().includes(q) ||
+                                getDeptCode(d).toLowerCase().includes(q)
+                              );
+                            })
                             .map((dept) => {
                               const isSelected = detailsFilterDept === dept;
+                              const code = getDeptCode(dept);
                               return (
                                 <Pressable
                                   key={dept}
@@ -1216,22 +1032,59 @@ export default function MoodScreen() {
                                     setDetailsFilterDept(dept);
                                     setDetailsDeptDropdownOpen(false);
                                     setDetailsDeptSearchQuery("");
+                                    const nextCampus =
+                                      dept === "通識教育中心"
+                                        ? detailsFilterCampus
+                                        : "全部";
+                                    if (dept !== "通識教育中心") {
+                                      setDetailsFilterCampus("全部");
+                                    } else {
+                                      setDetailsFilterGrade("全部");
+                                      setDetailsFilterCategory("全部");
+                                    }
                                     fetchDetailsCourses(
                                       dept,
-                                      detailsFilterGrade,
-                                      detailsFilterCategory
+                                      dept === "通識教育中心" ? "全部" : detailsFilterGrade,
+                                      dept === "通識教育中心" ? "全部" : detailsFilterCategory,
+                                      nextCampus
                                     );
                                   }}
                                 >
-                                  <Text
-                                    style={[
-                                      styles.deptDropdownItemText,
-                                      isSelected &&
-                                        styles.deptDropdownItemTextActive,
-                                    ]}
+                                  <View
+                                    style={{
+                                      flexDirection: "row",
+                                      alignItems: "center",
+                                      gap: 6,
+                                      flex: 1,
+                                    }}
                                   >
-                                    {dept}
-                                  </Text>
+                                    {code ? (
+                                      <View
+                                        style={[
+                                          styles.deptCodeBadge,
+                                          isSelected && styles.deptCodeBadgeActive,
+                                        ]}
+                                      >
+                                        <Text
+                                          style={[
+                                            styles.deptCodeBadgeText,
+                                            isSelected && styles.deptCodeBadgeTextActive,
+                                          ]}
+                                        >
+                                          {code}
+                                        </Text>
+                                      </View>
+                                    ) : null}
+                                    <Text
+                                      style={[
+                                        styles.deptDropdownItemText,
+                                        isSelected &&
+                                          styles.deptDropdownItemTextActive,
+                                      ]}
+                                    >
+                                      {dept === "全部" ? "全部系所" : dept}
+                                    </Text>
+                                  </View>
                                   {isSelected && (
                                     <Ionicons
                                       name="checkmark-circle"
@@ -1246,154 +1099,223 @@ export default function MoodScreen() {
                       </View>
                     )}
 
-                    <Text style={styles.filterTitle}>年級</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.pillRow}
-                    >
-                      {GRADES.map((g) => (
-                        <Pressable
-                          key={g}
-                          style={[
-                            styles.pill,
-                            detailsFilterGrade === g && styles.pillActive,
-                          ]}
-                          onPress={() => {
-                            setDetailsFilterGrade(g);
-                            fetchDetailsCourses(
-                              detailsFilterDept,
-                              g,
-                              detailsFilterCategory
-                            );
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.pillText,
-                              detailsFilterGrade === g && styles.pillTextActive,
-                            ]}
-                          >
-                            {g}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-
-                    <Text style={styles.filterTitle}>修別</Text>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      style={styles.pillRow}
-                    >
-                      {CATEGORIES.map((cat) => (
-                        <Pressable
-                          key={cat}
-                          style={[
-                            styles.pill,
-                            detailsFilterCategory === cat && styles.pillActive,
-                          ]}
-                          onPress={() => {
-                            setDetailsFilterCategory(cat);
-                            fetchDetailsCourses(
-                              detailsFilterDept,
-                              detailsFilterGrade,
-                              cat
-                            );
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.pillText,
-                              detailsFilterCategory === cat &&
-                                styles.pillTextActive,
-                            ]}
-                          >
-                            {cat}
-                          </Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-
-                    <View style={styles.divider} />
-
-                    {loadingDetailsCourses ? (
-                      <Text
-                        style={[
-                          styles.panelCopy,
-                          { textAlign: "center", paddingVertical: 18 },
-                        ]}
-                      >
-                        正在篩選符合的課程...
-                      </Text>
-                    ) : detailsCourses.length === 0 ? (
-                      <Text
-                        style={[
-                          styles.panelCopy,
-                          { textAlign: "center", paddingVertical: 18 },
-                        ]}
-                      >
-                        沒有符合此條件的課程。
-                      </Text>
-                    ) : (
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.courseListHint}>
-                          點擊課程即可查看詳細資訊：
-                        </Text>
+                    {/* 🌟 若系所別選擇「通識教育中心」，增加校區分類選項 */}
+                    {detailsFilterDept === "通識教育中心" && (
+                      <View style={{ marginTop: 14 }}>
+                        <Text style={styles.filterTitle}>校區</Text>
                         <ScrollView
-                          style={{ maxHeight: 280 }}
-                          contentContainerStyle={{
-                            gap: 10,
-                            paddingBottom: 10,
-                          }}
-                          nestedScrollEnabled={true}
-                          showsVerticalScrollIndicator={true}
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          style={styles.pillRow}
                         >
-                          {detailsCourses.map((course, index) => (
+                          {CAMPUS_OPTIONS.map((c) => (
                             <Pressable
-                              key={`${course.course_id}_${course.class_code || index}`}
-                              style={styles.courseSelectCard}
-                              onPress={() => handleOpenCourseDetails(course)}
+                              key={c}
+                              style={[
+                                styles.pill,
+                                detailsFilterCampus === c && styles.pillActive,
+                              ]}
+                              onPress={() => {
+                                setDetailsFilterCampus(c);
+                                fetchDetailsCourses(
+                                  detailsFilterDept,
+                                  detailsFilterGrade,
+                                  detailsFilterCategory,
+                                  c
+                                );
+                              }}
                             >
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.courseCardName}>
-                                  {course.course_name}
-                                  {course.class_name ? ` (${course.class_name})` : ""}
-                                </Text>
-                                <Text style={styles.courseCardMeta}>
-                                  {course.teacher || "授課教師"} ·{" "}
-                                  {course.department || "系所"} ·{" "}
-                                  {course.grade || "年級"} ·{" "}
-                                  {course.category || "修別"}
-                                  {course.credits !== undefined
-                                    ? ` · ${course.credits}學分`
-                                    : ""}
-                                </Text>
-                                {(Boolean(course.schedule) || Boolean(course.classroom)) && (
-                                  <Text
-                                    style={[
-                                      styles.courseCardMeta,
-                                      { color: "#F2C14E", marginTop: 2 },
-                                    ]}
-                                  >
-                                    {course.schedule ? `🕒 ${course.schedule}` : ""}
-                                    {course.schedule && course.classroom ? "  |  " : ""}
-                                    {course.classroom ? `📍 ${course.classroom}` : ""}
-                                  </Text>
-                                )}
-                              </View>
-                              <View style={styles.viewBadge}>
-                                <Ionicons
-                                  name="chevron-forward"
-                                  size={15}
-                                  color="#ffffff"
-                                />
-                              </View>
+                              <Text
+                                style={[
+                                  styles.pillText,
+                                  detailsFilterCampus === c && styles.pillTextActive,
+                                ]}
+                              >
+                                {c}
+                              </Text>
                             </Pressable>
                           ))}
                         </ScrollView>
                       </View>
                     )}
+
+                    {/* 🌟 非通識教育中心才顯示年級與修別 */}
+                    {detailsFilterDept !== "通識教育中心" && (
+                      <>
+                        <Text style={styles.filterTitle}>年級</Text>
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          style={styles.pillRow}
+                        >
+                          {GRADES.map((g) => (
+                            <Pressable
+                              key={g}
+                              style={[
+                                styles.pill,
+                                detailsFilterGrade === g && styles.pillActive,
+                              ]}
+                              onPress={() => {
+                                setDetailsFilterGrade(g);
+                                fetchDetailsCourses(
+                                  detailsFilterDept,
+                                  g,
+                                  detailsFilterCategory,
+                                  detailsFilterCampus
+                                );
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.pillText,
+                                  detailsFilterGrade === g && styles.pillTextActive,
+                                ]}
+                              >
+                                {g}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+
+                        {/* 修別（通識不顯示） */}
+                        <Text style={styles.filterTitle}>修別</Text>
+                        <ScrollView
+                          horizontal
+                          showsHorizontalScrollIndicator={false}
+                          style={styles.pillRow}
+                        >
+                          {CATEGORIES.map((cat) => (
+                            <Pressable
+                              key={cat}
+                              style={[
+                                styles.pill,
+                                detailsFilterCategory === cat && styles.pillActive,
+                              ]}
+                              onPress={() => {
+                                setDetailsFilterCategory(cat);
+                                fetchDetailsCourses(
+                                  detailsFilterDept,
+                                  detailsFilterGrade,
+                                  cat,
+                                  detailsFilterCampus
+                                );
+                              }}
+                            >
+                              <Text
+                                style={[
+                                  styles.pillText,
+                                  detailsFilterCategory === cat &&
+                                    styles.pillTextActive,
+                                ]}
+                              >
+                                {cat}
+                              </Text>
+                            </Pressable>
+                          ))}
+                        </ScrollView>
+                      </>
+                    )}
+
+                    <View style={styles.divider} />
+
+                    {(() => {
+                      const displayedDetailsCourses = detailsCourses.filter((course) => {
+                        if (detailsFilterDept !== "通識教育中心") return true;
+                        if (!detailsFilterCampus || detailsFilterCampus === "全部") return true;
+                        const target = detailsFilterCampus.replace("校區", "").trim();
+                        const info = `${course.classroom || ""} ${(course as any).campus || ""}`;
+                        if (target === "基和" || target === "基河") {
+                          return info.includes("基河") || info.includes("基和");
+                        }
+                        return info.includes(target);
+                      });
+
+                      if (loadingDetailsCourses) {
+                        return (
+                          <Text
+                            style={[
+                              styles.panelCopy,
+                              { textAlign: "center", paddingVertical: 18 },
+                            ]}
+                          >
+                            正在篩選符合的課程...
+                          </Text>
+                        );
+                      }
+
+                      if (displayedDetailsCourses.length === 0) {
+                        return (
+                          <Text
+                            style={[
+                              styles.panelCopy,
+                              { textAlign: "center", paddingVertical: 18 },
+                            ]}
+                          >
+                            沒有符合此條件的課程。
+                          </Text>
+                        );
+                      }
+
+                      return (
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.courseListHint}>
+                            點擊課程即可查看詳細資訊：
+                          </Text>
+                          <ScrollView
+                            style={{ maxHeight: 280 }}
+                            contentContainerStyle={{
+                              gap: 10,
+                              paddingBottom: 10,
+                            }}
+                            nestedScrollEnabled={true}
+                            showsVerticalScrollIndicator={true}
+                          >
+                            {displayedDetailsCourses.map((course, index) => (
+                              <Pressable
+                                key={`${course.course_id}_${course.class_code || index}`}
+                                style={styles.courseSelectCard}
+                                onPress={() => handleOpenCourseDetails(course)}
+                              >
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.courseCardName}>
+                                    {course.course_name}
+                                    {course.class_name ? ` (${course.class_name})` : ""}
+                                  </Text>
+                                  <Text style={styles.courseCardMeta}>
+                                    {course.teacher || "授課教師"} ·{" "}
+                                    {course.department || "系所"} ·{" "}
+                                    {course.grade || "年級"} ·{" "}
+                                    {course.category || "修別"}
+                                    {course.credits !== undefined
+                                      ? ` · ${course.credits}學分`
+                                      : ""}
+                                  </Text>
+                                  {(Boolean(course.schedule) || Boolean(course.classroom)) && (
+                                    <Text
+                                      style={[
+                                        styles.courseCardMeta,
+                                        { color: "#F2C14E", marginTop: 2 },
+                                      ]}
+                                    >
+                                      {course.schedule ? `🕒 ${course.schedule}` : ""}
+                                      {course.schedule && course.classroom ? "  |  " : ""}
+                                      {course.classroom ? `📍 ${course.classroom}` : ""}
+                                    </Text>
+                                  )}
+                                </View>
+                                <View style={styles.viewBadge}>
+                                  <Ionicons
+                                    name="chevron-forward"
+                                    size={15}
+                                    color="#ffffff"
+                                  />
+                                </View>
+                              </Pressable>
+                            ))}
+                          </ScrollView>
+                        </View>
+                      );
+                    })()}
                   </View>
                 )}
 
@@ -2838,6 +2760,27 @@ const styles = StyleSheet.create({
   deptDropdownItemTextActive: {
     color: "#16445A",
     fontWeight: "800",
+  },
+  deptCodeBadge: {
+    backgroundColor: "rgba(182, 227, 194, 0.18)",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "rgba(182, 227, 194, 0.35)",
+  },
+  deptCodeBadgeActive: {
+    backgroundColor: "rgba(22, 68, 90, 0.25)",
+    borderColor: "rgba(22, 68, 90, 0.4)",
+  },
+  deptCodeBadgeText: {
+    color: "#B6E3C2",
+    fontSize: 11,
+    fontWeight: "700",
+    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
+  },
+  deptCodeBadgeTextActive: {
+    color: "#16445A",
   },
   courseDetailCard: {
     backgroundColor: "rgba(255, 255, 255, 0.08)",
