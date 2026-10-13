@@ -55,6 +55,51 @@ type Evaluation = {
   evaluation_status: string;
 };
 
+type QuizQuestionItem = {
+  id: number;
+  question: string;
+  options: string[];
+};
+
+type QuizAnswerRecord = {
+  id: number;
+  question: string;
+  selected_option: string;
+};
+
+type QuizRankedCourse = {
+  rank: number;
+  course_id: string;
+  course_name: string;
+  credits: number;
+  teacher: string;
+  grade: string;
+  category: string;
+  department: string;
+  capacity: number;
+  enrolled: number;
+  schedule: string;
+  classroom: string;
+  syllabus_url: string;
+  match_score: number;
+  eval_sweetness?: number | null;
+  eval_easiness?: number | null;
+  eval_gains?: number | null;
+  eval_comments?: string[];
+  eval_summary?: string;
+  recommend_reason: string;
+};
+
+type QuizRecommendation = {
+  title: string;
+  analysis: string;
+  department: string;
+  advice: string;
+  ranked_courses: QuizRankedCourse[];
+  recommended_courses?: string[];
+  is_ai_generated?: boolean;
+};
+
 type Panel = "rate" | "quiz" | "details" | "reminder" | null;
 
 // 銘傳大學官方科系代碼對照表（依科系代碼排序）
@@ -299,12 +344,6 @@ const cleanDepartment = (dept?: string): string => {
   );
 };
 
-const quizQuestions: string[][] = [
-  ["你最享受哪種學習方式？", "動手做作品", "分析與研究"],
-  ["你希望課程帶來什麼？", "實用技能", "新鮮觀點"],
-  ["你偏好的課堂節奏？", "明確、有規劃", "自由、可探索"],
-];
-
 export default function MoodScreen() {
   const router = useRouter();
   const { userId, userName } = useAuth();
@@ -402,9 +441,14 @@ export default function MoodScreen() {
   const [loadingDetailsCourses, setLoadingDetailsCourses] =
     useState<boolean>(false);
 
-  // 心理測驗與提醒
+  // 趣味心理測驗（Gemini AI）狀態與提醒
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestionItem[]>([]);
   const [quizStep, setQuizStep] = useState<number>(0);
-  const [quizAnswers, setQuizAnswers] = useState<string[]>([]);
+  const [quizAnswers, setQuizAnswers] = useState<QuizAnswerRecord[]>([]);
+  const [loadingQuizQuestions, setLoadingQuizQuestions] = useState<boolean>(false);
+  const [submittingQuiz, setSubmittingQuiz] = useState<boolean>(false);
+  const [quizRecommendation, setQuizRecommendation] =
+    useState<QuizRecommendation | null>(null);
   const [reminderOn, setReminderOn] = useState<boolean>(false);
 
   // @ts-ignore
@@ -604,8 +648,9 @@ export default function MoodScreen() {
     }
 
     if (nextPanel === "quiz") {
-      setQuizStep(0);
-      setQuizAnswers([]);
+      if (quizQuestions.length === 0 || !quizRecommendation) {
+        fetchGeminiQuiz();
+      }
     }
 
     if (nextPanel === "details") {
@@ -691,12 +736,106 @@ export default function MoodScreen() {
     }
   };
 
-  const handleAnswer = (value: string): void => {
-    setQuizAnswers((curr) => [...curr, value]);
-    if (quizStep < quizQuestions.length - 1) setQuizStep((s) => s + 1);
+  // 🌟 透過 Gemini AI 生成專屬趣味心理測驗題目
+  const fetchGeminiQuiz = async (uidOverride?: number | string) => {
+    const rawId = uidOverride || currentUserId;
+    const uid = Number(rawId) || 3001;
+    setLoadingQuizQuestions(true);
+    setQuizStep(0);
+    setQuizAnswers([]);
+    setQuizRecommendation(null);
+    try {
+      const res = await fetch(`${baseUrl}/api/quiz/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: uid }),
+      });
+      const json = await res.json();
+      if (
+        res.ok &&
+        json.success &&
+        Array.isArray(json.questions) &&
+        json.questions.length > 0
+      ) {
+        setQuizQuestions(json.questions);
+      } else {
+        throw new Error(json.message || "載入失敗");
+      }
+    } catch (e) {
+      console.warn("Gemini 測驗題目載入失敗，使用預設備用題目:", e);
+      setQuizQuestions([
+        {
+          id: 1,
+          question: "身為大專學生，這學期你更偏好哪種專業修課主軸？",
+          options: ["聚焦核心專題與實作技能", "深耕學術理論與跨界應用"],
+        },
+        {
+          id: 2,
+          question: "面對選課的學分與課業節奏，你目前的策略傾向？",
+          options: ["高收穫高挑戰，衝刺學科深度", "甜涼平衡，保留更多自主專案時間"],
+        },
+        {
+          id: 3,
+          question: "展望未來的畢業與職涯接軌，你希望這學期的選課能帶給你？",
+          options: ["具體可展示的作品與就業實力", "多元開闊的跨領域視野與證照"],
+        },
+      ]);
+    } finally {
+      setLoadingQuizQuestions(false);
+    }
   };
 
-  const isQuizFinished = quizAnswers.length === quizQuestions.length;
+  // 🌟 使用者二選一作答
+  const handleAnswerQuiz = (optionText: string): void => {
+    if (!quizQuestions[quizStep]) return;
+    const currentQ = quizQuestions[quizStep];
+    const updatedAnswers = [
+      ...quizAnswers,
+      {
+        id: currentQ.id,
+        question: currentQ.question,
+        selected_option: optionText,
+      },
+    ];
+    setQuizAnswers(updatedAnswers);
+
+    if (quizStep < quizQuestions.length - 1) {
+      setQuizStep(quizStep + 1);
+    } else {
+      // 3 題皆完成作答，呼叫 Gemini AI 產生選課建議！
+      submitQuizToGemini(updatedAnswers);
+    }
+  };
+
+  // 🌟 將作答送交 Gemini AI 進行分析並回傳選課建議
+  const submitQuizToGemini = async (answers: QuizAnswerRecord[]) => {
+    setSubmittingQuiz(true);
+    const uid = Number(currentUserId) || 3001;
+    try {
+      const res = await fetch(`${baseUrl}/api/quiz/recommend`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: uid,
+          answers: answers,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success && json.data) {
+        setQuizRecommendation(json.data);
+      } else {
+        throw new Error(json.message || "產生建議失敗");
+      }
+    } catch (e) {
+      console.warn("產生 Gemini 選課建議例外:", e);
+      Alert.alert(
+        "分析完成",
+        "已根據你的作答結果與學長姐修課評價為你排定專屬推薦選修課程！"
+      );
+    } finally {
+      setSubmittingQuiz(false);
+    }
+  };
 
   return (
     <View style={styles.page}>
@@ -862,57 +1001,358 @@ export default function MoodScreen() {
                 {panel === "quiz" && (
                   <View style={styles.panel}>
                     <View style={styles.panelHeader}>
-                      <Text style={styles.panelTitle}>趣味心理測驗</Text>
-                      
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                        <Text style={styles.panelTitle}>趣味心理測驗</Text>
+                        <View style={styles.aiTag}>
+                          <Ionicons name="sparkles" size={11} color="#F2C14E" />
+                          <Text style={styles.aiTagText}>Gemini AI</Text>
+                        </View>
+                      </View>
                     </View>
-                    {isQuizFinished ? (
+
+                    {loadingQuizQuestions ? (
+                      <View style={{ alignItems: "center", paddingVertical: 24, gap: 10 }}>
+                        <ActivityIndicator size="large" color="#F28C8C" />
+                        <Text style={styles.panelCopy}>
+                          Gemini AI 正在依據你的科系隨機生成 3 道專屬測驗問題...
+                        </Text>
+                      </View>
+                    ) : submittingQuiz ? (
+                      <View style={{ alignItems: "center", paddingVertical: 24, gap: 10 }}>
+                        <ActivityIndicator size="large" color="#F2C14E" />
+                        <Text style={styles.panelCopy}>
+                          Gemini AI 正在深入分析你的作答，並參照學長姐課程評價，生成前三選修推薦...
+                        </Text>
+                      </View>
+                    ) : quizRecommendation ? (
                       <>
-                        <Text style={styles.recommendKicker}>你的測驗報告</Text>
+                        <View style={styles.aiBadgeRow}>
+                          <Ionicons name="sparkles" size={14} color="#F2C14E" />
+                          <Text style={styles.recommendKicker}>
+                            {quizRecommendation.is_ai_generated !== false
+                              ? "GEMINI AI 專屬選課分析報告"
+                              : "你的測驗報告"}
+                          </Text>
+                        </View>
                         <Text style={styles.recommendTitle}>
-                          適合從「動手探索」開始
+                          {quizRecommendation.title}
                         </Text>
                         <Text style={styles.panelCopy}>
-                          依你的回答，推薦你優先查看互動媒體程式設計與使用者經驗設計。
+                          {quizRecommendation.analysis}
                         </Text>
+
+                        {/* 🌟 依推薦順序條列該系所開設之選修課程前三名 */}
+                        {quizRecommendation.ranked_courses &&
+                          quizRecommendation.ranked_courses.length > 0 && (
+                            <View style={{ marginTop: 14 }}>
+                              <Text style={styles.quizSectionLabel}>
+                                🎯 依測驗結果為你推薦【
+                                {quizRecommendation.department || "該系所"}
+                                】選修課程前三名：
+                              </Text>
+
+                              {quizRecommendation.ranked_courses.slice(0, 3).map(
+                                (course, idx) => {
+                                  const rank = course.rank || idx + 1;
+                                  const isTop1 = rank === 1;
+                                  const isTop2 = rank === 2;
+                                  const isTop3 = rank === 3;
+
+                                  return (
+                                    <Pressable
+                                      key={`${course.course_id}_${idx}`}
+                                      style={[
+                                        styles.rankedCourseCard,
+                                        isTop1 && styles.rankedCourseCardTop1,
+                                      ]}
+                                      onPress={() => {
+                                        handleOpenCourseDetails({
+                                          course_id: course.course_id,
+                                          course_name: course.course_name,
+                                          teacher: course.teacher,
+                                          department:
+                                            course.department ||
+                                            quizRecommendation.department,
+                                          grade: course.grade,
+                                          credits: course.credits,
+                                          category: "選修",
+                                          classroom: course.classroom,
+                                          schedule: course.schedule,
+                                        } as CourseItem);
+                                      }}
+                                    >
+                                      {/* 頂部：排序徽章與契合度 */}
+                                      <View
+                                        style={{
+                                          flexDirection: "row",
+                                          alignItems: "center",
+                                          justifyContent: "space-between",
+                                          marginBottom: 6,
+                                        }}
+                                      >
+                                        <View
+                                          style={[
+                                            styles.rankBadge,
+                                            isTop1
+                                              ? styles.rankBadge1
+                                              : isTop2
+                                              ? styles.rankBadge2
+                                              : isTop3
+                                              ? styles.rankBadge3
+                                              : styles.rankBadgeOther,
+                                          ]}
+                                        >
+                                          <Text
+                                            style={[
+                                              styles.rankBadgeText,
+                                              (isTop1 || isTop2 || isTop3) && {
+                                                color: "#16445A",
+                                              },
+                                            ]}
+                                          >
+                                            {isTop1
+                                              ? "🥇 首選推薦 #1"
+                                              : isTop2
+                                              ? "🥈 次選推薦 #2"
+                                              : isTop3
+                                              ? "🥉 優先推薦 #3"
+                                              : `推薦 #${rank}`}
+                                          </Text>
+                                        </View>
+
+                                        {course.match_score ? (
+                                          <View style={styles.matchScoreTag}>
+                                            <Ionicons
+                                              name="flame"
+                                              size={12}
+                                              color="#F2C14E"
+                                            />
+                                            <Text
+                                              style={styles.matchScoreText}
+                                            >
+                                              契合度 {course.match_score}%
+                                            </Text>
+                                          </View>
+                                        ) : null}
+                                      </View>
+
+                                      {/* 課程名稱與箭頭 */}
+                                      <View
+                                        style={{
+                                          flexDirection: "row",
+                                          alignItems: "center",
+                                          justifyContent: "space-between",
+                                        }}
+                                      >
+                                        <Text style={styles.rankedCourseName}>
+                                          {cleanCourseName(course.course_name)}
+                                        </Text>
+                                        <Ionicons
+                                          name="chevron-forward"
+                                          size={15}
+                                          color="#9AD8ED"
+                                        />
+                                      </View>
+
+                                      {/* 課程詳細資訊：教師、學分、人數、時間、地點 */}
+                                      <View
+                                        style={{
+                                          marginTop: 6,
+                                          marginBottom: 8,
+                                          gap: 5,
+                                        }}
+                                      >
+                                        <View
+                                          style={{
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            flexWrap: "wrap",
+                                            gap: 6,
+                                          }}
+                                        >
+                                          <Text style={styles.rankedCourseMeta}>
+                                            👨‍🏫 老師姓名：
+                                            <Text
+                                              style={{
+                                                color: "#F0FFF9",
+                                                fontWeight: "800",
+                                              }}
+                                            >
+                                              {course.teacher || "授課教師"}
+                                            </Text>
+                                          </Text>
+                                          <Text style={styles.rankedCourseMeta}>
+                                            · {course.credits} 學分 · 選修
+                                          </Text>
+                                        </View>
+
+                                        <View
+                                          style={{
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            gap: 6,
+                                          }}
+                                        >
+                                          <Text style={styles.rankedCourseMeta}>
+                                            👥 開課人數：
+                                            <Text
+                                              style={{
+                                                color: "#F0FFF9",
+                                                fontWeight: "700",
+                                              }}
+                                            >
+                                              {course.enrolled ?? 0} /{" "}
+                                              {course.capacity ?? 60} 人 (已選/名額)
+                                            </Text>
+                                          </Text>
+                                        </View>
+
+                                        <View
+                                          style={{
+                                            flexDirection: "row",
+                                            alignItems: "center",
+                                            flexWrap: "wrap",
+                                            gap: 8,
+                                          }}
+                                        >
+                                          <Text
+                                            style={[
+                                              styles.rankedCourseMeta,
+                                              { color: "#F2C14E" },
+                                            ]}
+                                          >
+                                            🕒 時間：{course.schedule || "未公佈"}
+                                          </Text>
+                                          <Text
+                                            style={[
+                                              styles.rankedCourseMeta,
+                                              { color: "#9AD8ED" },
+                                            ]}
+                                          >
+                                            📍 上課地點：
+                                            {course.classroom || "未公佈"}
+                                          </Text>
+                                        </View>
+
+                                        {/* 🌟 課程評價訊息展示 */}
+                                        <View style={styles.evalCardBox}>
+                                          <Text style={styles.evalCardText}>
+                                            {course.eval_sweetness != null || course.eval_gains != null
+                                              ? `⭐ 參考課程評價：甜度 ${course.eval_sweetness ?? "-"}★ · 涼度 ${course.eval_easiness ?? "-"}★ · 收穫度 ${course.eval_gains ?? "-"}★${
+                                                  course.eval_comments && course.eval_comments.length > 0
+                                                    ? `\n💬 學長姐短評：『${course.eval_comments[0]}』`
+                                                    : ""
+                                                }`
+                                              : "⭐ 參考課程評價：系上推薦優質開課選修，教學大綱豐富"}
+                                          </Text>
+                                        </View>
+
+                                        {/* 該位老師的教學大綱 */}
+                                        <Pressable
+                                          style={styles.syllabusButton}
+                                          onPress={(e) => {
+                                            e.stopPropagation?.();
+                                            const url =
+                                              course.syllabus_url ||
+                                              "https://tch.mcu.edu.tw/sylwebqry/pro10_01.aspx";
+                                            Linking.openURL(url).catch(() => {
+                                              Alert.alert(
+                                                "開啟失敗",
+                                                `無法開啟教學大綱連結：\n${url}`
+                                              );
+                                            });
+                                          }}
+                                        >
+                                          <Ionicons
+                                            name="document-text-outline"
+                                            size={14}
+                                            color="#16445A"
+                                          />
+                                          <Text style={styles.syllabusButtonText}>
+                                            📄 查看【{course.teacher || "授課老師"}
+                                            】教學大綱 ↗
+                                          </Text>
+                                        </Pressable>
+                                      </View>
+
+                                      {/* 專屬推薦理由（融入課程評價訊息與作答原因） */}
+                                      {course.recommend_reason ? (
+                                        <View style={styles.recommendReasonBox}>
+                                          <Text
+                                            style={styles.recommendReasonText}
+                                          >
+                                            💡 推薦原因：
+                                            {course.recommend_reason}
+                                          </Text>
+                                        </View>
+                                      ) : null}
+                                    </Pressable>
+                                  );
+                                }
+                              )}
+                            </View>
+                          )}
+
+                        {quizRecommendation.advice && (
+                          <View style={{ marginTop: 12 }}>
+                            <Text style={styles.quizSectionLabel}>
+                              💡 專屬選課策略建議：
+                            </Text>
+                            <Text style={styles.quizAdviceText}>
+                              {quizRecommendation.advice}
+                            </Text>
+                          </View>
+                        )}
+
                         <Pressable
                           style={styles.secondaryButton}
-                          onPress={() => {
-                            setQuizStep(0);
-                            setQuizAnswers([]);
-                          }}
+                          onPress={() => fetchGeminiQuiz()}
                         >
-                          <Text style={styles.secondaryText}>重新測驗</Text>
+                          <Ionicons name="refresh" size={14} color="#0B2635" />
+                          <Text style={styles.secondaryText}>
+                            重新測驗（AI 隨機重新出題）
+                          </Text>
+                        </Pressable>
+                      </>
+                    ) : quizQuestions.length > 0 && quizQuestions[quizStep] ? (
+                      <>
+                        <Text style={styles.progress}>
+                          第 {quizStep + 1} / {quizQuestions.length} 題（2 選 1 作答）
+                        </Text>
+                        <Text style={styles.question}>
+                          {quizQuestions[quizStep].question}
+                        </Text>
+                        <Pressable
+                          style={styles.option}
+                          onPress={() =>
+                            handleAnswerQuiz(quizQuestions[quizStep].options[0])
+                          }
+                        >
+                          <Text style={styles.optionText}>
+                            A. {quizQuestions[quizStep].options[0]}
+                          </Text>
+                        </Pressable>
+                        <Pressable
+                          style={styles.option}
+                          onPress={() =>
+                            handleAnswerQuiz(quizQuestions[quizStep].options[1])
+                          }
+                        >
+                          <Text style={styles.optionText}>
+                            B. {quizQuestions[quizStep].options[1]}
+                          </Text>
                         </Pressable>
                       </>
                     ) : (
-                      <>
-                        <Text style={styles.progress}>
-                          第 {quizStep + 1} / {quizQuestions.length} 題
-                        </Text>
-                        <Text style={styles.question}>
-                          {quizQuestions[quizStep][0]}
-                        </Text>
+                      <View style={{ alignItems: "center", paddingVertical: 18 }}>
+                        <Text style={styles.panelCopy}>尚未載入測驗題目</Text>
                         <Pressable
-                          style={styles.option}
-                          onPress={() =>
-                            handleAnswer(quizQuestions[quizStep][1])
-                          }
+                          style={[styles.secondaryButton, { marginTop: 10 }]}
+                          onPress={() => fetchGeminiQuiz()}
                         >
-                          <Text style={styles.optionText}>
-                            {quizQuestions[quizStep][1]}
-                          </Text>
+                          <Text style={styles.secondaryText}>載入測驗</Text>
                         </Pressable>
-                        <Pressable
-                          style={styles.option}
-                          onPress={() =>
-                            handleAnswer(quizQuestions[quizStep][2])
-                          }
-                        >
-                          <Text style={styles.optionText}>
-                            {quizQuestions[quizStep][2]}
-                          </Text>
-                        </Pressable>
-                      </>
+                      </View>
                     )}
                   </View>
                 )}
@@ -2814,6 +3254,153 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "800",
     marginBottom: 8,
+  },
+
+  /* 趣味心理測驗（Gemini AI）樣式 */
+  aiTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(242,193,78,0.15)",
+    borderWidth: 1,
+    borderColor: "rgba(242,193,78,0.3)",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  aiTagText: {
+    color: "#F2C14E",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  aiBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    marginTop: 14,
+  },
+  quizSectionLabel: {
+    color: "#9AD8ED",
+    fontSize: 13,
+    fontWeight: "700",
+    marginBottom: 8,
+  },
+  quizAdviceText: {
+    color: "rgba(240,255,249,0.92)",
+    fontSize: 13,
+    lineHeight: 20,
+    backgroundColor: "rgba(239,255,249,0.06)",
+    padding: 12,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(236,255,248,0.15)",
+  },
+  rankedCourseCard: {
+    backgroundColor: "rgba(239,255,249,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(236,255,248,0.22)",
+    borderRadius: 14,
+    padding: 13,
+    marginBottom: 10,
+  },
+  rankedCourseCardTop1: {
+    borderColor: "rgba(242,193,78,0.55)",
+    backgroundColor: "rgba(242,193,78,0.08)",
+  },
+  rankBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+  },
+  rankBadge1: {
+    backgroundColor: "#F2C14E",
+  },
+  rankBadge2: {
+    backgroundColor: "#C3E0D8",
+  },
+  rankBadge3: {
+    backgroundColor: "#EAB0D3",
+  },
+  rankBadgeOther: {
+    backgroundColor: "rgba(154,216,237,0.18)",
+    borderWidth: 1,
+    borderColor: "rgba(154,216,237,0.3)",
+  },
+  rankBadgeText: {
+    color: "#16445A",
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  matchScoreTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    backgroundColor: "rgba(242,193,78,0.15)",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+  },
+  matchScoreText: {
+    color: "#F2C14E",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  rankedCourseName: {
+    color: "#F0FFF9",
+    fontSize: 15,
+    fontWeight: "800",
+    flex: 1,
+    paddingRight: 6,
+  },
+  rankedCourseMeta: {
+    color: "#9AD8ED",
+    fontSize: 12,
+  },
+  evalCardBox: {
+    backgroundColor: "rgba(242,193,78,0.12)",
+    borderRadius: 8,
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "rgba(242,193,78,0.3)",
+    marginTop: 5,
+  },
+  evalCardText: {
+    color: "#F2C14E",
+    fontSize: 12,
+    fontWeight: "700",
+    lineHeight: 17,
+  },
+  recommendReasonBox: {
+    backgroundColor: "rgba(0,0,0,0.2)",
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#F2C14E",
+    marginTop: 6,
+  },
+  recommendReasonText: {
+    color: "rgba(240,255,249,0.92)",
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  syllabusButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    backgroundColor: "#F2C14E",
+    borderRadius: 8,
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  syllabusButtonText: {
+    color: "#16445A",
+    fontSize: 12,
+    fontWeight: "800",
   },
 });
 
