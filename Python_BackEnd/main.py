@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 from database import get_database
 from mcu_crawler import MCUAuthError, MCUCrawlerError, crawl_mcu_transcript
-
+from moodle_crawler import MoodleAuthError, MoodleCrawlerError, crawl_moodle_notifications
 
 # =============================================================
 # 1. Pydantic 資料格式
@@ -146,6 +146,18 @@ class SyncTranscriptRequest(BaseModel):
     user_id: int
     mcu_account: str
     mcu_password: str
+
+# -------------------------
+# Moodle請求格式宣告
+# -------------------------
+class SyncMoodleRequest(BaseModel):
+    user_id: int
+    moodle_account: str
+    moodle_password: str
+
+class ToggleAssignmentRequest(BaseModel):
+    user_id: int
+    assignment_id: str
 
 
 # =============================================================
@@ -465,72 +477,69 @@ def reset_password(req: ResetPasswordRequest):
 # 8. 學生聯絡簿
 # =============================================================
 
+# Python_BackEnd/main.py 端點 8
 @app.get("/api/student/feed")
 def get_student_feed(user_id: int = 3001):
     try:
-        # 查詢學生修課紀錄
+        # 1. 查詢學生修課紀錄
         records = list(
             db["STUDENT_ACADEMIC_RECORD"].find({"user_id": user_id})
         )
-
         raw_ids = [r["course_id"] for r in records if "course_id" in r]
 
-        # 建立課程 ID 清單
         my_course_ids = []
-
         for cid in raw_ids:
             my_course_ids.append(cid)
-
             try:
                 my_course_ids.append(int(cid))
             except (ValueError, TypeError):
                 pass
-
             my_course_ids.append(str(cid))
-
         my_course_ids = list(set(my_course_ids))
 
-        # 建立課程名稱對照
+        # 2. 建立課程名稱對照
         courses = list(db["COURSE"].find({}))
-
         course_map = {}
-
         for course in courses:
             cid = str(course.get("id") or course.get("course_id"))
             cname = course.get("course_name") or course.get("name") or "課堂公告"
             course_map[cid] = cname
 
-        # 查詢公告
+        # 3. 🌟 關鍵修復：查詢條件同時涵蓋「課程 ID」與「學生的 user_id (Moodle 通知)」
         col = db["NOTIFY"]
-
+        user_queries = [
+            {"user_id": user_id},
+            {"user_id": str(user_id)},
+        ]
         if my_course_ids:
-            query = {"course_id": {"$in": my_course_ids}}
-        else:
-            query = {"course_id": -999}
+            user_queries.append({"course_id": {"$in": my_course_ids}})
 
-        docs = list(col.find(query).sort("_id", -1).limit(10))
+        query = {"$or": user_queries}
+        docs = list(col.find(query).sort("_id", -1).limit(20))
 
         feeds = []
-
         for doc in docs:
             icon_map = {
                 "作業提醒": "document-text-outline",
                 "小考時程": "alert-circle-outline",
                 "課堂公告": "megaphone-outline",
             }
-
-            icon = icon_map.get(doc.get("type"), "megaphone-outline")
-
+            icon = doc.get("icon") or icon_map.get(doc.get("type"), "megaphone-outline")
             raw_cid = doc.get("course_id")
 
-            if raw_cid is not None:
-                cid_str = str(raw_cid)
-                cname = course_map.get(cid_str, f"課程 {cid_str}")
-            else:
-                cname = "全校公告"
+            # 🌟 優先採用 Moodle 或公告本身存下的 course_name
+            cname = doc.get("course_name")
+            if not cname:
+                if raw_cid is not None:
+                    cname = course_map.get(str(raw_cid), f"課程 {raw_cid}")
+                else:
+                    cname = "全校公告"
 
             raw_title = doc.get("title", "課堂公告")
-            formatted_title = f"【{cname}】{raw_title}"
+            if raw_title.startswith("【") or cname == "Moodle":
+                formatted_title = raw_title
+            else:
+                formatted_title = f"【{cname}】{raw_title}"
 
             feeds.append({
                 "id": str(doc["_id"]),
@@ -541,7 +550,7 @@ def get_student_feed(user_id: int = 3001):
                 "raw_title": raw_title,
                 "content": doc.get("content", ""),
                 "time": str(
-                    doc.get("published_at") or doc.get("update_time") or "最新"
+                    doc.get("time") or doc.get("published_at") or doc.get("update_time") or "最新"
                 ),
                 "due_date": doc.get("due_date"),
             })
@@ -2747,7 +2756,7 @@ def recommend_courses_by_quiz(req: QuizRecommendRequest):
             final_ranked_courses = []
             for idx, c_item in enumerate(top_picks):
                 teacher_desc = f"由【{c_item['teacher']}】老師指導" if c_item['teacher'] != '授課教師' else "由專業師資群授課"
-                
+
                 # 專屬且融入課程評價之推薦原因
                 if c_item.get("eval_gains") or c_item.get("eval_sweetness"):
                     eval_clause = f"參考學長姐高評價（收穫度 {c_item.get('eval_gains', 4.5)}★、甜度 {c_item.get('eval_sweetness', 4.0)}★）"
@@ -2822,4 +2831,118 @@ def recommend_courses_by_quiz(req: QuizRecommendRequest):
                 "advice": "建議本學期安排 18~22 學分，以核心專長搭配應用選修進行修習。",
                 "is_ai_generated": False,
             },
-        }
+        }
+
+# =============================================================
+# 33. Moodle 模組：三大端點
+# =============================================================
+
+# ① 同步 Moodle 資料端點
+@app.post("/api/student/sync-moodle")
+def sync_moodle(req: SyncMoodleRequest):
+    try:
+        assignments, feeds = crawl_moodle_notifications(
+            req.moodle_account, req.moodle_password
+        )
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        for a in assignments:
+            update_data = {
+                "title": a["title"],
+                "course": a["course"],
+                "due": a["due"],
+                "updated_at": now_str,
+            }
+            set_on_insert = {}
+
+            if a.get("is_done"):
+                update_data["is_done"] = True
+            else:
+                set_on_insert["is_done"] = False
+
+            update_doc = {"$set": update_data}
+            if set_on_insert:
+                update_doc["$setOnInsert"] = set_on_insert
+
+            db["STUDENT_ASSIGNMENT"].update_one(
+                {"user_id": req.user_id, "assignment_id": a["assignment_id"]},
+                update_doc,
+                upsert=True,
+            )
+
+        for f in feeds:
+            db["NOTIFY"].update_one(
+                {"user_id": req.user_id, "content": f["content"]},
+                {
+                    "$set": {
+                        "user_id": req.user_id,
+                        "title": f["title"],
+                        "course_name": "Moodle",
+                        "content": f["content"],
+                        "time": f["time"],
+                        "type": f["type"],
+                        "icon": f["icon"],
+                        "published_at": now_str,
+                    }
+                },
+                upsert=True,
+            )
+
+        return {
+            "success": True,
+            "message": f"成功同步 {len(assignments)} 筆作業與 {len(feeds)} 則通知！",
+            "assignment_count": len(assignments),
+            "feed_count": len(feeds),
+        }
+
+    except MoodleAuthError as e:
+        raise HTTPException(status_code=401, detail=str(e))
+    except MoodleCrawlerError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ② 取得學生作業清單端點（支援 int 與 str 學號防呆）
+@app.get("/api/student/assignments")
+def get_student_assignments(user_id: int):
+    try:
+        query = {
+            "$or": [
+                {"user_id": user_id},
+                {"user_id": str(user_id)},
+            ]
+        }
+        docs = list(db["STUDENT_ASSIGNMENT"].find(query).sort("due", -1))
+        for d in docs:
+            d["_id"] = str(d["_id"])
+        return {"success": True, "data": docs}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ③ 手動標記作業完成狀態端點
+@app.post("/api/student/assignments/toggle")
+def toggle_assignment(req: ToggleAssignmentRequest):
+    try:
+        target = db["STUDENT_ASSIGNMENT"].find_one({
+            "user_id": req.user_id,
+            "assignment_id": req.assignment_id,
+        })
+        if not target:
+            raise HTTPException(status_code=404, detail="找不到該作業紀錄")
+
+        new_status = not target.get("is_done", False)
+        db["STUDENT_ASSIGNMENT"].update_one(
+            {"_id": target["_id"]},
+            {
+                "$set": {
+                    "is_done": new_status,
+                    "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                }
+            },
+        )
+        return {"success": True, "is_done": new_status}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

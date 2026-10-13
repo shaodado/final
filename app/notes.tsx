@@ -1,35 +1,28 @@
+// app/notes.tsx
 import { Ionicons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "./_layout";
 
-const defaultAssignments = [
-  {
-    title: "互動原型期中提案",
-    course: "使用者經驗設計",
-    due: "明天 23:59",
-    done: false,
-  },
-  {
-    title: "資料故事草稿",
-    course: "資料視覺化",
-    due: "週四 18:00",
-    done: false,
-  },
-  { title: "閱讀心得 #3", course: "數位文化研究", due: "下週一", done: true },
-];
+const DEFAULT_STUDENT_ID = process.env.EXPO_PUBLIC_DEFAULT_USER_ID || "";
 
 const defaultAgenda = [
   "09:10 互動媒體程式設計",
@@ -37,90 +30,42 @@ const defaultAgenda = [
   "15:10 社群媒體與文化",
 ];
 
-/* 預設 7 筆公告，方便即時驗證一頁 5 筆的翻頁效果 */
-const defaultFeeds = [
-  {
-    icon: "megaphone-outline",
-    title: "期中提案延期",
-    content:
-      "使用者經驗設計：期中提案繳交期限延至週五，請同學於繳交前確認原型連結與權限設定完整。",
-    time: "10 分鐘前",
-    course_name: "使用者經驗設計",
-  },
-  {
-    icon: "calendar-outline",
-    title: "上課方式異動",
-    content:
-      "資料視覺化：因應校外專家演講，下週課程改為線上同步授課，會議連結已寄發至校園信箱。",
-    time: "昨天",
-    course_name: "資料視覺化",
-  },
-  {
-    icon: "document-text-outline",
-    title: "課堂資料更新",
-    content:
-      "數位文化研究：本週閱讀補充資料已上傳至教學平台，請同學提早下載並準備課堂小組討論要點。",
-    time: "週一",
-    course_name: "數位文化研究",
-  },
-  {
-    icon: "alert-circle-outline",
-    title: "分組名單確認",
-    content:
-      "互動媒體程式設計：期末專案分組名單已截止登記，請各組組長確認成員名冊與題目提案。",
-    time: "3 天前",
-    course_name: "互動媒體程式設計",
-  },
-  {
-    icon: "clipboard-outline",
-    title: "作業繳交格式規範",
-    content:
-      "社群媒體與文化：作業二請一律轉為 PDF 檔案上傳，檔名請依「學號_姓名_作業2」命名。",
-    time: "4 天前",
-    course_name: "社群媒體與文化",
-  },
-  {
-    icon: "time-outline",
-    title: "助教課輔諮詢時段調整",
-    content:
-      "使用者經驗設計：本週四助教 Office Hour 調整至 15:30~17:30，地點在系館 302 研討室。",
-    time: "上週",
-    course_name: "使用者經驗設計",
-  },
-  {
-    icon: "checkmark-done-outline",
-    title: "期中平時成績公佈",
-    content:
-      "資料視覺化：前半學期平時作業與出缺席分數已登錄於成績系統，請同學於週日前複查。",
-    time: "上週",
-    course_name: "資料視覺化",
-  },
-];
-
 type Panel = "feed" | "assignments" | "schedule" | "reminder" | null;
 
 export default function NotesScreen() {
   const router = useRouter();
   const { userId, userName } = useAuth();
-  const currentUserId = userId || 3001;
+
+  // 🌟 核心：支援本機快取學號，預設 0
+  const [currentUserId, setCurrentUserId] = useState<number>(
+    DEFAULT_STUDENT_ID ? Number(DEFAULT_STUDENT_ID) : 0
+  );
   const currentUserName = userName || "同學";
 
   const [panel, setPanel] = useState<Panel>(null);
-  const [completed, setCompleted] = useState<string[]>(
-    defaultAssignments.filter((item) => item.done).map((item) => item.title)
-  );
   const [smartReminder, setSmartReminder] = useState(false);
 
   // 動態聯絡簿公告狀態
-  const [feedList, setFeedList] = useState<any[]>(defaultFeeds);
+  const [feedList, setFeedList] = useState<any[]>([]);
   const [loadingFeed, setLoadingFeed] = useState(false);
 
-  // 當前點選查看詳情的公告索引（null 代表關閉彈窗）
+  // 當前點選查看詳情的公告索引
   const [selectedFeedIndex, setSelectedFeedIndex] = useState<number | null>(
     null
   );
 
-  // Modal 彈窗內的前後公告判斷
+  // 作業清單動態狀態
+  const [assignmentList, setAssignmentList] = useState<any[]>([]);
+  const [loadingAssignments, setLoadingAssignments] = useState(false);
+
+  // Moodle 同步彈窗狀態
+  const [moodleModalVisible, setMoodleModalVisible] = useState(false);
+  const [moodleAccount, setMoodleAccount] = useState(
+    DEFAULT_STUDENT_ID ? String(DEFAULT_STUDENT_ID) : ""
+  );
+  const [moodlePassword, setMoodlePassword] = useState("");
+  const [syncingMoodle, setSyncingMoodle] = useState(false);
+
   const hasPrevFeed = selectedFeedIndex !== null && selectedFeedIndex > 0;
   const hasNextFeed =
     selectedFeedIndex !== null && selectedFeedIndex < feedList.length - 1;
@@ -140,81 +85,208 @@ export default function NotesScreen() {
   const currentSelectedFeed =
     selectedFeedIndex !== null ? feedList[selectedFeedIndex] : null;
 
-  // 使用者手動點擊或重新整理時呼叫
-  const fetchStudentFeed = async () => {
+  // 讀取真實作業清單
+  const fetchAssignments = useCallback(
+    async (targetId?: number) => {
+      const uid = targetId !== undefined ? targetId : currentUserId;
+      if (!uid || uid === 0) return;
+
+      try {
+        setLoadingAssignments(true);
+        // @ts-ignore
+        const baseUrl =
+          process.env.EXPO_PUBLIC_API_URL ||
+          process.env.EXPO_PUBLIC_API_BASE_URL ||
+          "http://127.0.0.1:8000";
+        const res = await fetch(
+          `${baseUrl}/api/student/assignments?user_id=${uid}`
+        );
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          setAssignmentList(json.data);
+        } else {
+          setAssignmentList([]);
+        }
+      } catch (e) {
+        console.warn("載入作業清單失敗:", e);
+        setAssignmentList([]);
+      } finally {
+        setLoadingAssignments(false);
+      }
+    },
+    [currentUserId]
+  );
+
+  // 取得聯絡簿公告
+  const fetchStudentFeed = useCallback(
+    async (targetId?: number) => {
+      const uid = targetId !== undefined ? targetId : currentUserId;
+      if (!uid || uid === 0) return;
+
+      try {
+        setLoadingFeed(true);
+        // @ts-ignore
+        const baseUrl =
+          process.env.EXPO_PUBLIC_API_URL ||
+          process.env.EXPO_PUBLIC_API_BASE_URL ||
+          "http://127.0.0.1:8000";
+        const res = await fetch(`${baseUrl}/api/student/feed?user_id=${uid}`);
+        const data = await res.json();
+
+        if (data.success && Array.isArray(data.data)) {
+          setFeedList(data.data);
+        } else {
+          setFeedList([]);
+        }
+      } catch (e) {
+        console.warn("抓取專屬聯絡簿失敗:", e);
+        setFeedList([]);
+      } finally {
+        setLoadingFeed(false);
+      }
+    },
+    [currentUserId]
+  );
+
+  // 🌟 初次進入頁面：優先從 AsyncStorage 讀取與 courses.tsx 相同的已登入學號
+  useEffect(() => {
+    const initUserData = async () => {
+      try {
+        const storedId = await AsyncStorage.getItem("current_user_id");
+        const activeId = storedId
+          ? Number(storedId)
+          : DEFAULT_STUDENT_ID
+            ? Number(DEFAULT_STUDENT_ID)
+            : userId
+              ? Number(userId)
+              : 0;
+
+        if (activeId > 0) {
+          setCurrentUserId(activeId);
+          setMoodleAccount(String(activeId));
+          fetchAssignments(activeId);
+          fetchStudentFeed(activeId);
+        }
+      } catch (e) {
+        console.warn("讀取本機登入學號失敗:", e);
+      }
+    };
+
+    initUserData();
+  }, [userId, fetchAssignments, fetchStudentFeed]);
+
+  // 切換作業打勾狀態並同步寫回 MongoDB
+  const toggleAssignmentStatus = async (assignId: string) => {
+    setAssignmentList((prev) =>
+      prev.map((item) =>
+        item.assignment_id === assignId || item.title === assignId
+          ? { ...item, is_done: !Boolean(item.is_done ?? item.done) }
+          : item
+      )
+    );
+
     try {
-      setLoadingFeed(true);
       // @ts-ignore
       const baseUrl =
-        process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
-      const res = await fetch(
-        `${baseUrl}/api/student/feed?user_id=${currentUserId}`
-      );
-      const data = await res.json();
-
-      if (data.success && data.data && data.data.length > 0) {
-        setFeedList(data.data);
-      } else {
-        setFeedList(defaultFeeds);
-      }
+        process.env.EXPO_PUBLIC_API_URL ||
+        process.env.EXPO_PUBLIC_API_BASE_URL ||
+        "http://127.0.0.1:8000";
+      await fetch(`${baseUrl}/api/student/assignments/toggle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: currentUserId,
+          assignment_id: assignId,
+        }),
+      });
     } catch (e) {
-      console.warn("抓取專屬聯絡簿失敗，切換為離線資料:", e);
-      setFeedList(defaultFeeds);
-    } finally {
-      setLoadingFeed(false);
+      console.warn("更新作業完成狀態失敗:", e);
     }
   };
 
-  // 背景預載（符合 ESLint 規範，杜絕串聯渲染警告）
-  useEffect(() => {
-    let isMounted = true;
+  // 同步 Moodle 資料
+  const handleSyncMoodle = async () => {
+    if (!moodleAccount.trim() || !moodlePassword) {
+      Alert.alert("請填寫完整", "請輸入 Moodle 帳號與密碼。");
+      return;
+    }
 
-    const loadInitialFeed = async () => {
-      try {
-        // @ts-ignore
-        const baseUrl =
-          process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
-        const res = await fetch(
-          `${baseUrl}/api/student/feed?user_id=${currentUserId}`
+    const targetUserId = Number(moodleAccount.trim());
+    if (isNaN(targetUserId) || targetUserId <= 0) {
+      Alert.alert("格式錯誤", "學號必須為有效的數字。");
+      return;
+    }
+
+    Keyboard.dismiss();
+    setSyncingMoodle(true);
+
+    try {
+      // @ts-ignore
+      const baseUrl =
+        process.env.EXPO_PUBLIC_API_URL ||
+        process.env.EXPO_PUBLIC_API_BASE_URL ||
+        "http://127.0.0.1:8000";
+      const res = await fetch(`${baseUrl}/api/student/sync-moodle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: targetUserId,
+          moodle_account: moodleAccount.trim(),
+          moodle_password: moodlePassword,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        Alert.alert("同步成功", json.message);
+        setCurrentUserId(targetUserId);
+        setMoodleModalVisible(false);
+        setMoodlePassword("");
+        fetchAssignments(targetUserId);
+        fetchStudentFeed(targetUserId);
+      } else {
+        Alert.alert(
+          "同步失敗",
+          json.detail || "帳號密碼錯誤或伺服器連線異常。"
         );
-        const data = await res.json();
-
-        if (isMounted && data.success && data.data && data.data.length > 0) {
-          setFeedList(data.data);
-        }
-      } catch {
-        // 預設保持 defaultFeeds
       }
-    };
+    } catch {
+      Alert.alert("連線失敗", "無法連線至後端伺服器。");
+    } finally {
+      setSyncingMoodle(false);
+    }
+  };
 
-    loadInitialFeed();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [currentUserId]);
-
-  const toggleAssignment = (title: string) =>
-    setCompleted((old) =>
-      old.includes(title)
-        ? old.filter((item) => item !== title)
-        : [...old, title]
-    );
+  const completedCount = assignmentList.filter((item) =>
+    Boolean(item.is_done ?? item.done)
+  ).length;
 
   return (
     <View style={styles.page}>
       <View style={[styles.glow, styles.glowTop]} />
       <View style={[styles.glow, styles.glowBottom]} />
       <SafeAreaView style={styles.safeArea}>
-        <Pressable
-          style={styles.backButton}
-          onPress={() => router.back()}
-          accessibilityRole="button"
-          accessibilityLabel="返回大廳"
-        >
-          <Ionicons name="arrow-back" size={20} color="#E9FFF7" />
-          <Text style={styles.backText}>大廳</Text>
-        </Pressable>
+        {/* 頂部 Header */}
+        <View style={styles.headerRow}>
+          <Pressable
+            style={styles.backButton}
+            onPress={() => router.back()}
+            accessibilityRole="button"
+            accessibilityLabel="返回大廳"
+          >
+            <Ionicons name="arrow-back" size={20} color="#E9FFF7" />
+            <Text style={styles.backText}>大廳</Text>
+          </Pressable>
+
+          <Pressable
+            style={styles.syncButton}
+            onPress={() => setMoodleModalVisible(true)}
+            accessibilityRole="button"
+          >
+            <Ionicons name="sync-outline" size={14} color="#F2C14E" />
+            <Text style={styles.syncButtonText}>同步 Moodle</Text>
+          </Pressable>
+        </View>
+
         <ScrollView
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
@@ -229,10 +301,15 @@ export default function NotesScreen() {
 
           <Text style={styles.sectionTitle}>管理工具</Text>
           <View style={styles.actions}>
+            {/* 1. 動態聯絡簿 */}
             <View>
               <Action
                 title="查看動態聯絡簿"
-                detail="掌握最新課堂公告與異動"
+                detail={
+                  feedList.length > 0
+                    ? `掌握 ${feedList.length} 則最新課堂公告`
+                    : "尚未同步課堂公告"
+                }
                 icon="chatbubbles-outline"
                 color="#9AD8ED"
                 expanded={panel === "feed"}
@@ -249,20 +326,28 @@ export default function NotesScreen() {
                 <PanelView
                   panel={panel}
                   close={() => setPanel(null)}
-                  completed={completed}
-                  toggleAssignment={toggleAssignment}
                   smartReminder={smartReminder}
                   setSmartReminder={setSmartReminder}
                   feedList={feedList}
                   loadingFeed={loadingFeed}
                   onSelectFeedIndex={(idx) => setSelectedFeedIndex(idx)}
+                  assignmentList={assignmentList}
+                  loadingAssignments={loadingAssignments}
+                  toggleAssignment={toggleAssignmentStatus}
+                  onOpenSyncModal={() => setMoodleModalVisible(true)}
                 />
               )}
             </View>
+
+            {/* 2. 作業完成狀態 */}
             <View>
               <Action
                 title="標記作業完成狀態"
-                detail={`${completed.length} / ${defaultAssignments.length} 項作業已完成`}
+                detail={
+                  assignmentList.length > 0
+                    ? `${completedCount} / ${assignmentList.length} 項作業已完成`
+                    : "尚未同步 Moodle 作業"
+                }
                 icon="checkbox-outline"
                 color="#B6E3C2"
                 expanded={panel === "assignments"}
@@ -274,16 +359,20 @@ export default function NotesScreen() {
                 <PanelView
                   panel={panel}
                   close={() => setPanel(null)}
-                  completed={completed}
-                  toggleAssignment={toggleAssignment}
                   smartReminder={smartReminder}
                   setSmartReminder={setSmartReminder}
                   feedList={feedList}
                   loadingFeed={loadingFeed}
                   onSelectFeedIndex={(idx) => setSelectedFeedIndex(idx)}
+                  assignmentList={assignmentList}
+                  loadingAssignments={loadingAssignments}
+                  toggleAssignment={toggleAssignmentStatus}
+                  onOpenSyncModal={() => setMoodleModalVisible(true)}
                 />
               )}
             </View>
+
+            {/* 3. 個人課業時程 */}
             <View>
               <Action
                 title="匯出個人課業時程"
@@ -299,16 +388,20 @@ export default function NotesScreen() {
                 <PanelView
                   panel={panel}
                   close={() => setPanel(null)}
-                  completed={completed}
-                  toggleAssignment={toggleAssignment}
                   smartReminder={smartReminder}
                   setSmartReminder={setSmartReminder}
                   feedList={feedList}
                   loadingFeed={loadingFeed}
                   onSelectFeedIndex={(idx) => setSelectedFeedIndex(idx)}
+                  assignmentList={assignmentList}
+                  loadingAssignments={loadingAssignments}
+                  toggleAssignment={toggleAssignmentStatus}
+                  onOpenSyncModal={() => setMoodleModalVisible(true)}
                 />
               )}
             </View>
+
+            {/* 4. 自訂提醒規則 */}
             <View>
               <Action
                 title="自訂提醒規則"
@@ -327,13 +420,15 @@ export default function NotesScreen() {
                 <PanelView
                   panel={panel}
                   close={() => setPanel(null)}
-                  completed={completed}
-                  toggleAssignment={toggleAssignment}
                   smartReminder={smartReminder}
                   setSmartReminder={setSmartReminder}
                   feedList={feedList}
                   loadingFeed={loadingFeed}
                   onSelectFeedIndex={(idx) => setSelectedFeedIndex(idx)}
+                  assignmentList={assignmentList}
+                  loadingAssignments={loadingAssignments}
+                  toggleAssignment={toggleAssignmentStatus}
+                  onOpenSyncModal={() => setMoodleModalVisible(true)}
                 />
               )}
             </View>
@@ -341,7 +436,7 @@ export default function NotesScreen() {
         </ScrollView>
       </SafeAreaView>
 
-      {/* 結構化公告詳情彈窗（具備上一頁／下一頁導航） */}
+      {/* 公告詳情彈窗 */}
       <Modal
         visible={selectedFeedIndex !== null}
         transparent
@@ -350,7 +445,6 @@ export default function NotesScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            {/* 彈窗頂部列 */}
             <View style={styles.modalHeader}>
               <View style={{ flex: 1, paddingRight: 10 }}>
                 <View style={styles.modalTagRow}>
@@ -381,7 +475,6 @@ export default function NotesScreen() {
               </Pressable>
             </View>
 
-            {/* 內文滾動區域 */}
             <ScrollView
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.modalScrollBody}
@@ -395,7 +488,6 @@ export default function NotesScreen() {
                 </Text>
               </View>
 
-              {/* 截止期限資訊（若有） */}
               {(currentSelectedFeed?.due_date ||
                 currentSelectedFeed?.expiresAt) && (
                 <View style={styles.deadlineCard}>
@@ -409,7 +501,6 @@ export default function NotesScreen() {
               )}
             </ScrollView>
 
-            {/* 彈窗底部「上一頁 / 下一頁」分頁導航列 */}
             <View style={styles.paginationFooter}>
               <Pressable
                 disabled={!hasPrevFeed}
@@ -472,6 +563,89 @@ export default function NotesScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Moodle 同步彈窗 */}
+      <Modal
+        visible={moodleModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          Keyboard.dismiss();
+          setMoodleModalVisible(false);
+        }}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.syncModalOverlay}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : undefined}
+              style={styles.keyboardAvoidContainer}
+            >
+              <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                <View style={styles.syncModalCard}>
+                  <Text style={styles.syncModalTitle}>
+                    同步 Moodle 作業與通知
+                  </Text>
+                  <Text style={styles.syncModalSubtitle}>
+                    輸入 Moodle
+                    帳密以取得最新課堂作業截止日與催繳通知。密碼僅於記憶體中驗證，遵循數據不落地原則。
+                  </Text>
+
+                  <TextInput
+                    style={styles.syncModalInput}
+                    placeholder="Moodle 學號帳號"
+                    placeholderTextColor="rgba(240,255,249,0.4)"
+                    value={moodleAccount}
+                    onChangeText={setMoodleAccount}
+                    keyboardType="number-pad"
+                    autoCapitalize="none"
+                    returnKeyType="next"
+                  />
+                  <TextInput
+                    style={styles.syncModalInput}
+                    placeholder="Moodle 密碼"
+                    placeholderTextColor="rgba(240,255,249,0.4)"
+                    value={moodlePassword}
+                    onChangeText={setMoodlePassword}
+                    secureTextEntry
+                    returnKeyType="done"
+                    onSubmitEditing={Keyboard.dismiss}
+                  />
+
+                  <View style={styles.syncModalBtnRow}>
+                    <Pressable
+                      style={[styles.syncModalBtn, styles.syncModalCancelBtn]}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        setMoodleModalVisible(false);
+                      }}
+                      disabled={syncingMoodle}
+                    >
+                      <Text style={styles.syncModalCancelText}>取消</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={[styles.syncModalBtn, styles.syncModalConfirmBtn]}
+                      onPress={() => {
+                        Keyboard.dismiss();
+                        handleSyncMoodle();
+                      }}
+                      disabled={syncingMoodle}
+                    >
+                      {syncingMoodle ? (
+                        <ActivityIndicator size="small" color="#16445A" />
+                      ) : (
+                        <Text style={styles.syncModalConfirmText}>
+                          開始同步
+                        </Text>
+                      )}
+                    </Pressable>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </KeyboardAvoidingView>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     </View>
   );
 }
@@ -533,23 +707,27 @@ function Action({
 
 function PanelView({
   panel,
-  completed,
-  toggleAssignment,
   smartReminder,
   setSmartReminder,
   feedList,
   loadingFeed,
   onSelectFeedIndex,
+  assignmentList,
+  loadingAssignments,
+  toggleAssignment,
+  onOpenSyncModal,
 }: {
   panel: Exclude<Panel, null>;
   close: () => void;
-  completed: string[];
-  toggleAssignment: (title: string) => void;
   smartReminder: boolean;
   setSmartReminder: (value: boolean) => void;
   feedList: any[];
   loadingFeed: boolean;
   onSelectFeedIndex: (idx: number) => void;
+  assignmentList: any[];
+  loadingAssignments?: boolean;
+  toggleAssignment: (id: string) => void;
+  onOpenSyncModal: () => void;
 }) {
   const title =
     panel === "feed"
@@ -560,12 +738,10 @@ function PanelView({
           ? "個人課業時程"
           : "自訂提醒規則";
 
-  // 動態聯絡簿分頁設定：每頁固定 5 筆
   const PAGE_SIZE = 5;
   const [feedPage, setFeedPage] = useState<number>(1);
   const totalPages = Math.ceil(feedList.length / PAGE_SIZE) || 1;
 
-  // 計算當前頁要渲染的子陣列與起始全域索引
   const startIndex = (feedPage - 1) * PAGE_SIZE;
   const displayedFeeds = feedList.slice(startIndex, startIndex + PAGE_SIZE);
 
@@ -575,6 +751,7 @@ function PanelView({
         <Text style={styles.panelTitle}>{title}</Text>
       </View>
 
+      {/* 1. 動態聯絡簿 */}
       {panel === "feed" && (
         <View style={{ marginTop: 6 }}>
           {loadingFeed ? (
@@ -585,7 +762,6 @@ function PanelView({
           ) : feedList.length > 0 ? (
             <>
               {displayedFeeds.map((item, idx) => {
-                // 將分頁內的局部索引換算為全域索引，確保 Modal 彈窗連動正確
                 const globalIndex = startIndex + idx;
                 return (
                   <Feed
@@ -599,7 +775,6 @@ function PanelView({
                 );
               })}
 
-              {/* 公告列表「上一頁 / 下一頁」分頁導航列 */}
               <View style={styles.paginationFooter}>
                 <Pressable
                   disabled={feedPage <= 1}
@@ -667,40 +842,90 @@ function PanelView({
               </View>
             </>
           ) : (
-            <Text style={styles.panelCopy}>目前沒有專屬的課堂異動公告。</Text>
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons
+                  name="chatbubbles-outline"
+                  size={26}
+                  color="#F2C14E"
+                />
+              </View>
+              <Text style={styles.emptyTitle}>尚未同步課堂聯絡簿</Text>
+              <Text style={styles.emptyDesc}>
+                目前資料庫中尚未建立您的 Moodle 課堂通知與異動公告。{"\n"}
+                請點擊下方按鈕進行同步以取得最新資訊。
+              </Text>
+              <Pressable
+                style={styles.emptySyncBtn}
+                onPress={onOpenSyncModal}
+                accessibilityRole="button"
+              >
+                <Ionicons name="sync-outline" size={15} color="#16445A" />
+                <Text style={styles.emptySyncBtnText}>立即同步 Moodle</Text>
+              </Pressable>
+            </View>
           )}
         </View>
       )}
 
+      {/* 2. 作業完成清單 */}
       {panel === "assignments" && (
         <View style={styles.itemList}>
-          {defaultAssignments.map((item) => {
-            const done = completed.includes(item.title);
-            return (
+          {loadingAssignments ? (
+            <ActivityIndicator
+              color="#F2C14E"
+              style={{ paddingVertical: 20 }}
+            />
+          ) : assignmentList && assignmentList.length > 0 ? (
+            assignmentList.map((item) => {
+              const isDone = Boolean(item.is_done ?? item.done);
+              const assignId = item.assignment_id || item.title;
+              return (
+                <Pressable
+                  key={assignId}
+                  onPress={() => toggleAssignment(assignId)}
+                  style={styles.assignment}
+                >
+                  <Ionicons
+                    name={isDone ? "checkmark-circle" : "ellipse-outline"}
+                    size={23}
+                    color={isDone ? "#9EF2BE" : "#B9D7CF"}
+                  />
+                  <View style={styles.itemCopy}>
+                    <Text style={[styles.itemTitle, isDone && styles.done]}>
+                      {item.title}
+                    </Text>
+                    <Text style={styles.itemMeta}>
+                      {item.course} · {item.due}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })
+          ) : (
+            <View style={styles.emptyCard}>
+              <View style={styles.emptyIconCircle}>
+                <Ionicons name="clipboard-outline" size={26} color="#F2C14E" />
+              </View>
+              <Text style={styles.emptyTitle}>尚未同步 Moodle 作業清單</Text>
+              <Text style={styles.emptyDesc}>
+                目前資料庫中尚未有任何待繳作業紀錄。{"\n"}
+                請點擊下方按鈕同步最新的作業截止日與繳交狀態。
+              </Text>
               <Pressable
-                key={item.title}
-                onPress={() => toggleAssignment(item.title)}
-                style={styles.assignment}
+                style={styles.emptySyncBtn}
+                onPress={onOpenSyncModal}
+                accessibilityRole="button"
               >
-                <Ionicons
-                  name={done ? "checkmark-circle" : "ellipse-outline"}
-                  size={23}
-                  color={done ? "#9EF2BE" : "#B9D7CF"}
-                />
-                <View style={styles.itemCopy}>
-                  <Text style={[styles.itemTitle, done && styles.done]}>
-                    {item.title}
-                  </Text>
-                  <Text style={styles.itemMeta}>
-                    {item.course} · {item.due}
-                  </Text>
-                </View>
+                <Ionicons name="sync-outline" size={15} color="#16445A" />
+                <Text style={styles.emptySyncBtnText}>立即同步 Moodle</Text>
               </Pressable>
-            );
-          })}
+            </View>
+          )}
         </View>
       )}
 
+      {/* 3. 課業時程 */}
       {panel === "schedule" && (
         <>
           <Text style={styles.panelCopy}>今天 · 課業時程總覽</Text>
@@ -727,6 +952,7 @@ function PanelView({
         </>
       )}
 
+      {/* 4. 提醒規則 */}
       {panel === "reminder" && (
         <>
           <Text style={styles.panelCopy}>
@@ -778,7 +1004,6 @@ function Feed({
         <Ionicons name={icon} size={18} color="#9AD8ED" />
       </View>
       <View style={styles.itemCopy}>
-        {/* 主題單行截斷 */}
         <Text
           style={styles.feedTitleText}
           numberOfLines={1}
@@ -786,7 +1011,6 @@ function Feed({
         >
           {title}
         </Text>
-        {/* 內文單行截斷 */}
         {content ? (
           <Text
             style={styles.feedContentText}
@@ -825,15 +1049,32 @@ const styles = StyleSheet.create({
     left: -160,
     backgroundColor: "#F2C14E",
   },
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 10,
+  },
   backButton: {
     flexDirection: "row",
     alignItems: "center",
     gap: 7,
-    alignSelf: "flex-start",
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingRight: 14,
   },
   backText: { color: "#E9FFF7", fontSize: 14, fontWeight: "700" },
+  syncButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: "rgba(242,193,78,0.18)",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "rgba(242,193,78,0.4)",
+  },
+  syncButtonText: { color: "#F2C14E", fontSize: 13, fontWeight: "700" },
   content: { paddingTop: 20, paddingBottom: 38 },
   kicker: {
     color: "#B4D8D2",
@@ -895,7 +1136,6 @@ const styles = StyleSheet.create({
   panelCopy: { color: "#B8D8D0", fontSize: 13, lineHeight: 20, marginTop: 13 },
   itemList: { gap: 9, marginTop: 16 },
 
-  /* 動態聯絡簿卡片按鈕樣式 */
   feed: {
     flexDirection: "row",
     paddingVertical: 13,
@@ -975,7 +1215,6 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(242,193,78,0.13)",
   },
 
-  /* 結構化詳情 Modal 樣式 */
   modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
@@ -999,9 +1238,7 @@ const styles = StyleSheet.create({
     paddingBottom: 15,
     marginBottom: 14,
   },
-  modalCloseButton: {
-    padding: 4,
-  },
+  modalCloseButton: { padding: 4 },
   modalTagRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -1014,24 +1251,15 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6,
   },
-  detailTagText: {
-    color: "#9AD8ED",
-    fontSize: 11,
-    fontWeight: "700",
-  },
-  modalMetaDate: {
-    color: "#8FB8AE",
-    fontSize: 11,
-  },
+  detailTagText: { color: "#9AD8ED", fontSize: 11, fontWeight: "700" },
+  modalMetaDate: { color: "#8FB8AE", fontSize: 11 },
   modalFullTitle: {
     color: "#F0FFF9",
     fontSize: 18,
     fontWeight: "800",
     lineHeight: 24,
   },
-  modalScrollBody: {
-    paddingVertical: 10,
-  },
+  modalScrollBody: { paddingVertical: 10 },
   detailBox: {
     backgroundColor: "rgba(255,255,255,0.06)",
     borderRadius: 14,
@@ -1063,13 +1291,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(242,140,140,0.25)",
   },
-  deadlineText: {
-    color: "#F28C8C",
-    fontSize: 12,
-    fontWeight: "700",
-  },
+  deadlineText: { color: "#F28C8C", fontSize: 12, fontWeight: "700" },
 
-  /* 底部上一頁/下一頁分頁導航列（適用於列表與彈窗） */
   paginationFooter: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1098,17 +1321,113 @@ const styles = StyleSheet.create({
     opacity: 0.7,
     transform: [{ scale: 0.96 }],
   },
-  pageButtonText: {
+  pageButtonText: { color: "#F0FFF9", fontSize: 13, fontWeight: "700" },
+  pageButtonTextDisabled: { color: "rgba(240,255,249,0.3)" },
+  pageIndicator: { color: "#A9CEC3", fontSize: 13, fontWeight: "700" },
+
+  emptyCard: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 24,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    backgroundColor: "rgba(255,255,255,0.05)",
+    borderWidth: 1,
+    borderColor: "rgba(236,255,248,0.15)",
+    marginTop: 6,
+  },
+  emptyIconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: "rgba(242,193,78,0.15)",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "rgba(242,193,78,0.3)",
+  },
+  emptyTitle: {
     color: "#F0FFF9",
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 6,
+    textAlign: "center",
+  },
+  emptyDesc: {
+    color: "rgba(240,255,249,0.65)",
+    fontSize: 12.5,
+    lineHeight: 18,
+    textAlign: "center",
+    marginBottom: 16,
+  },
+  emptySyncBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: "#F2C14E",
+    paddingHorizontal: 18,
+    paddingVertical: 9,
+    borderRadius: 14,
+  },
+  emptySyncBtnText: {
+    color: "#16445A",
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "800",
   },
-  pageButtonTextDisabled: {
-    color: "rgba(240,255,249,0.3)",
+
+  syncModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
   },
-  pageIndicator: {
-    color: "#A9CEC3",
+  keyboardAvoidContainer: {
+    width: "100%",
+    alignItems: "center",
+  },
+  syncModalCard: {
+    width: "100%",
+    backgroundColor: "#16445A",
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: "rgba(236,255,248,0.3)",
+    padding: 24,
+  },
+  syncModalTitle: {
+    color: "#F0FFF9",
+    fontSize: 20,
+    fontWeight: "800",
+    marginBottom: 8,
+  },
+  syncModalSubtitle: {
+    color: "rgba(240,255,249,0.65)",
     fontSize: 13,
-    fontWeight: "700",
+    lineHeight: 18,
+    marginBottom: 18,
   },
+  syncModalInput: {
+    height: 48,
+    borderWidth: 1,
+    borderColor: "rgba(236,255,248,0.25)",
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    color: "#F0FFF9",
+    fontSize: 15,
+    marginBottom: 12,
+  },
+  syncModalBtnRow: { flexDirection: "row", gap: 12, marginTop: 8 },
+  syncModalBtn: {
+    flex: 1,
+    height: 46,
+    borderRadius: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  syncModalCancelBtn: { backgroundColor: "rgba(255,255,255,0.12)" },
+  syncModalCancelText: { color: "#F0FFF9", fontWeight: "700" },
+  syncModalConfirmBtn: { backgroundColor: "#F2C14E" },
+  syncModalConfirmText: { color: "#16445A", fontWeight: "800" },
 });
