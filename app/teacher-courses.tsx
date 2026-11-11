@@ -64,8 +64,8 @@ export default function TeacherCoursesScreen() {
   return (
     <View style={styles.page}>
       {/* 背景裝飾 */}
-      <View style={[styles.glow, styles.glowTop]} />
-      <View style={[styles.glow, styles.glowBottom]} />
+      <View style={[styles.glow, styles.glowTop]} pointerEvents="none" />
+      <View style={[styles.glow, styles.glowBottom]} pointerEvents="none" />
 
       <SafeAreaView style={styles.safeArea}>
         <ScrollView

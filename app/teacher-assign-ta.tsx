@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "./_layout";
+import { getApiBaseUrl } from "@/constants/api-base";
 
 // ================================
 // API 位址（自動偵測，也可用 EXPO_PUBLIC_API_URL 手動指定）
@@ -23,7 +24,7 @@ import { useAuth } from "./_layout";
 const API_PORT = 8000;
 
 function getApiBase(): string {
-  const manual = process.env.EXPO_PUBLIC_API_URL;
+  return getApiBaseUrl();
   if (manual) return manual.replace(/\/$/, "");
 
   if (Platform.OS === "web" && typeof window !== "undefined") {
@@ -310,8 +311,8 @@ export default function TeacherAssignTAScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       
       {/* 背景 Glow */}
-      <View style={styles.pinkGlow} />
-      <View style={styles.yellowGlow} />
+      <View style={styles.pinkGlow} pointerEvents="none" />
+      <View style={styles.yellowGlow} pointerEvents="none" />
 
       <SafeAreaView style={styles.safeArea}>
         <ScrollView

@@ -15,6 +15,7 @@ import {
     View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { getApiBaseUrl } from "@/constants/api-base";
 
 // ================================
 // API 位址（自動偵測）
@@ -25,7 +26,7 @@ const API_PORT = 8000;
 
 function getApiBase(): string {
     // 1. 手動指定
-    const manual = process.env.EXPO_PUBLIC_API_URL;
+    return getApiBaseUrl();
     if (manual) return manual.replace(/\/$/, "");
 
     // 2. 網頁版：跟著目前網址的主機
@@ -316,8 +317,8 @@ export default function ManagerAnnouncementsScreen() {
         <View style={styles.page}>
             <Stack.Screen options={{ headerShown: false }} />
             
-            <View style={styles.pinkGlow} />
-            <View style={styles.yellowGlow} />
+            <View style={styles.pinkGlow} pointerEvents="none" />
+            <View style={styles.yellowGlow} pointerEvents="none" />
 
             <SafeAreaView style={styles.safeArea}>
                 <ScrollView

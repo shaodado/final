@@ -7,7 +7,33 @@ import {
 } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { createContext, useContext, useEffect, useRef, useState } from "react";
+import { Alert, Platform } from "react-native";
 import "react-native-reanimated";
+
+if (Platform.OS === "web" && typeof window !== "undefined") {
+  Alert.alert = (
+    title?: string,
+    message?: string,
+    buttons?: Array<{ text?: string; onPress?: () => void; style?: string }>
+  ) => {
+    const text = [title, message].filter(Boolean).join("\n\n");
+    if (!buttons || buttons.length <= 1) {
+      window.alert(text);
+      if (buttons && buttons[0]?.onPress) {
+        buttons[0].onPress();
+      }
+      return;
+    }
+    if (window.confirm(text)) {
+      const confirmBtn =
+        buttons.find((b) => b.style !== "cancel") || buttons[buttons.length - 1];
+      confirmBtn?.onPress?.();
+    } else {
+      const cancelBtn = buttons.find((b) => b.style === "cancel");
+      cancelBtn?.onPress?.();
+    }
+  };
+}
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
@@ -58,6 +84,15 @@ export default function RootLayout() {
     setUserId(nextUserId);
     setUserName(nextUserName);
     setIsSignedIn(true);
+
+    // 登入後立即導向對應角色主頁
+    if (normalizedRole === "teacher") {
+      router.replace("/teacher" as never);
+    } else if (normalizedRole === "manager") {
+      router.replace("/manager" as never);
+    } else {
+      router.replace("/(tabs)" as never);
+    }
   };
 
   const signOut = () => {
@@ -67,15 +102,22 @@ export default function RootLayout() {
     setIsSignedIn(false);
   };
 
-  // 保險：從「已登入」變成「未登入」時，明確導回登入頁
-  // 放在 effect 裡，才會等守衛更新完、登入頁開放之後才導向
+  // 保險：登入狀態改變時進行導向
   const wasSignedIn = useRef(false);
   useEffect(() => {
     if (wasSignedIn.current && !isSignedIn) {
       router.replace("/login" as never);
+    } else if (Platform.OS === "web" && !wasSignedIn.current && isSignedIn && role) {
+      if (role === "teacher") {
+        router.replace("/teacher" as never);
+      } else if (role === "manager") {
+        router.replace("/manager" as never);
+      } else {
+        router.replace("/(tabs)" as never);
+      }
     }
     wasSignedIn.current = isSignedIn;
-  }, [isSignedIn, router]);
+  }, [isSignedIn, role, router]);
 
   return (
     <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>

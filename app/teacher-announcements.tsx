@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "./_layout";
+import { getApiBaseUrl } from "@/constants/api-base";
 
 type Announcement = {
   id: string;
@@ -41,7 +42,7 @@ export default function TeacherAnnouncementsScreen() {
   const currentCourseName = params.courseName || "課程";
 
   // @ts-ignore
-  const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const baseUrl = getApiBaseUrl();
 
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -236,8 +237,8 @@ export default function TeacherAnnouncementsScreen() {
 
   return (
     <View style={styles.page}>
-      <View style={[styles.glow, styles.glowTop]} />
-      <View style={[styles.glow, styles.glowBottom]} />
+      <View style={[styles.glow, styles.glowTop]} pointerEvents="none" />
+      <View style={[styles.glow, styles.glowBottom]} pointerEvents="none" />
 
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>

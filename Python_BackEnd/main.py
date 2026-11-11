@@ -270,8 +270,13 @@ db = get_database()
 # 6. 首頁測試
 # =============================================================
 
+from fastapi.responses import FileResponse
+
 @app.get("/")
 def root():
+    index_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dist", "index.html"))
+    if os.path.isfile(index_file):
+        return FileResponse(index_file)
     return {
         "status": "online",
         "message": "FastAPI 後端運作正常",
@@ -2945,4 +2950,40 @@ def toggle_assignment(req: ToggleAssignmentRequest):
         return {"success": True, "is_done": new_status}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================
+# 靜態網頁與前端資源掛載
+# =============================================================
+from fastapi.staticfiles import StaticFiles
+
+_dist_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "dist"))
+
+if os.path.exists(_dist_path):
+    _expo_path = os.path.join(_dist_path, "_expo")
+    if os.path.exists(_expo_path):
+        app.mount("/_expo", StaticFiles(directory=_expo_path), name="expo_static")
+    _assets_path = os.path.join(_dist_path, "assets")
+    if os.path.exists(_assets_path):
+        app.mount("/assets", StaticFiles(directory=_assets_path), name="assets_static")
+
+    @app.get("/{full_path:path}")
+    def serve_frontend(full_path: str):
+        if full_path.startswith("api/") or full_path.startswith("docs") or full_path.startswith("openapi.json"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        
+        file_path = os.path.join(_dist_path, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        
+        html_file = os.path.join(_dist_path, f"{full_path}.html")
+        if os.path.isfile(html_file):
+            return FileResponse(html_file)
+            
+        index_file = os.path.join(_dist_path, "index.html")
+        if os.path.isfile(index_file):
+            return FileResponse(index_file)
+            
+        raise HTTPException(status_code=404, detail="Not Found")
+
 

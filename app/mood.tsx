@@ -23,6 +23,18 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "./_layout";
+import { getApiBaseUrl } from "@/constants/api-base";
+
+const ModalCardTouchWrapper = ({ children }: { children: React.ReactNode }) => {
+  if (Platform.OS === "web") {
+    return <>{children}</>;
+  }
+  return (
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      {children}
+    </TouchableWithoutFeedback>
+  );
+};
 
 type CourseItem = {
   course_id: number | string;
@@ -388,7 +400,7 @@ export default function MoodScreen() {
   const [departmentList, setDepartmentList] = useState<string[]>(DEPARTMENTS);
 
   // @ts-ignore
-  const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const baseUrl = getApiBaseUrl();
 
   useEffect(() => {
     const fetchDepts = async () => {
@@ -817,8 +829,8 @@ export default function MoodScreen() {
 
   return (
     <View style={styles.page}>
-      <View style={[styles.glow, styles.glowTop]} />
-      <View style={[styles.glow, styles.glowBottom]} />
+      <View style={[styles.glow, styles.glowTop]} pointerEvents="none" />
+      <View style={[styles.glow, styles.glowBottom]} pointerEvents="none" />
 
       <SafeAreaView style={styles.safeArea}>
         <Pressable style={styles.backButton} onPress={() => router.back()}>
@@ -2229,7 +2241,7 @@ export default function MoodScreen() {
                   behavior={Platform.OS === "ios" ? "padding" : undefined}
                   style={styles.keyboardAvoidContainer}
                 >
-                  <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+                  <ModalCardTouchWrapper>
                     <View style={styles.syncModalCard}>
                       <Text style={styles.syncModalTitle}>
                         同步學校資訊系統
@@ -2293,7 +2305,7 @@ export default function MoodScreen() {
                         </Pressable>
                       </View>
                     </View>
-                  </TouchableWithoutFeedback>
+                  </ModalCardTouchWrapper>
                 </KeyboardAvoidingView>
               </View>
             )}
@@ -2565,13 +2577,14 @@ export default function MoodScreen() {
           setSyncModalVisible(false);
         }}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <TouchableWithoutFeedback onPress={Platform.OS === "web" ? undefined : Keyboard.dismiss}>
           <View style={styles.syncModalCenteredOverlay}>
             <KeyboardAvoidingView
               behavior={Platform.OS === "ios" ? "padding" : undefined}
+              enabled={Platform.OS !== "web"}
               style={styles.keyboardAvoidContainer}
             >
-              <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <ModalCardTouchWrapper>
                 <View style={styles.syncModalCard}>
                   <Text style={styles.syncModalTitle}>同步學校資訊系統</Text>
                   <Text style={styles.syncModalSubtitle}>
@@ -2627,7 +2640,7 @@ export default function MoodScreen() {
                     </Pressable>
                   </View>
                 </View>
-              </TouchableWithoutFeedback>
+              </ModalCardTouchWrapper>
             </KeyboardAvoidingView>
           </View>
         </TouchableWithoutFeedback>
@@ -3182,8 +3195,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     color: "#F0FFF9",
-    fontSize: 15,
+    fontSize: 16,
     marginBottom: 12,
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : {}),
   },
   syncModalBtnRow: { flexDirection: "row", gap: 12, marginTop: 8 },
   syncModalBtn: {

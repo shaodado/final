@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "./_layout";
+import { getApiBaseUrl } from "@/constants/api-base";
 
 // 泡泡大小：想跟學生頁完全一樣可改成 154
 const BUBBLE_SIZE = 190;
@@ -56,7 +57,7 @@ export default function TeacherScreen() {
   const { signOut } = useAuth();
 
   // @ts-ignore
-  const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const baseUrl = getApiBaseUrl();
 
   const [schoolAnnouncements, setSchoolAnnouncements] = useState<
     SchoolAnnouncement[]
@@ -139,8 +140,8 @@ export default function TeacherScreen() {
       <Stack.Screen options={{ headerShown: false }} />
       
       {/* 背景 Glow */}
-      <View style={styles.pinkGlow} />
-      <View style={styles.yellowGlow} />
+      <View style={styles.pinkGlow} pointerEvents="none" />
+      <View style={styles.yellowGlow} pointerEvents="none" />
 
       <SafeAreaView style={styles.safeArea}>
         <ScrollView
@@ -216,7 +217,7 @@ export default function TeacherScreen() {
                 style={styles.bubbleGradient}
               >
                 <View style={styles.bubbleShine} />
-                <View style={styles.bubbleGlow} />
+                <View style={styles.bubbleGlow} pointerEvents="none" />
 
                 <Text style={styles.bubbleLabel}>課程專區</Text>
                 <Text style={styles.bubbleSubtitle}>查看與管理課程</Text>

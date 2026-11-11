@@ -21,6 +21,35 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "./_layout";
 
+const getApiBaseUrl = () => {
+  if (Platform.OS === "web" && typeof window !== "undefined") {
+    if (
+      window.location.protocol === "https:" ||
+      window.location.port === "8000" ||
+      window.location.port === ""
+    ) {
+      return window.location.origin;
+    }
+    return `http://${window.location.hostname}:8000`;
+  }
+  return (
+    process.env.EXPO_PUBLIC_API_BASE_URL ||
+    process.env.EXPO_PUBLIC_API_URL ||
+    "http://127.0.0.1:8000"
+  );
+};
+
+const FormTouchWrapper = ({ children }: { children: React.ReactNode }) => {
+  if (Platform.OS === "web") {
+    return <>{children}</>;
+  }
+  return (
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+      {children}
+    </TouchableWithoutFeedback>
+  );
+};
+
 export default function LoginScreen() {
   const { signIn } = useAuth();
   const [account, setAccount] = useState("");
@@ -62,11 +91,7 @@ export default function LoginScreen() {
 
     try {
       setLoading(true);
-      // 支援 EXPO_PUBLIC_API_BASE_URL 或 EXPO_PUBLIC_API_URL
-      const baseUrl =
-        process.env.EXPO_PUBLIC_API_BASE_URL ||
-        process.env.EXPO_PUBLIC_API_URL ||
-        "http://127.0.0.1:8000";
+      const baseUrl = getApiBaseUrl();
 
       const res = await fetch(`${baseUrl}/api/login`, {
         method: "POST",
@@ -138,8 +163,7 @@ export default function LoginScreen() {
 
     try {
       setLoading(true);
-      const baseUrl =
-        process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const baseUrl = getApiBaseUrl();
 
       const res = await fetch(`${baseUrl}/api/register`, {
         method: "POST",
@@ -181,8 +205,7 @@ export default function LoginScreen() {
     }
     try {
       setLoading(true);
-      const baseUrl =
-        process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const baseUrl = getApiBaseUrl();
       const res = await fetch(`${baseUrl}/api/forgot-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -214,8 +237,7 @@ export default function LoginScreen() {
     }
     try {
       setLoading(true);
-      const baseUrl =
-        process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      const baseUrl = getApiBaseUrl();
       const res = await fetch(`${baseUrl}/api/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -251,12 +273,13 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.page}>
-      <View style={[styles.glow, styles.glowTop]} />
-      <View style={[styles.glow, styles.glowBottom]} />
+      <View style={[styles.glow, styles.glowTop]} pointerEvents="none" />
+      <View style={[styles.glow, styles.glowBottom]} pointerEvents="none" />
 
       <SafeAreaView style={styles.safeArea}>
         <KeyboardAvoidingView
           style={{ flex: 1 }}
+          enabled={Platform.OS !== "web"}
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
         >
@@ -265,10 +288,7 @@ export default function LoginScreen() {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <TouchableWithoutFeedback
-              onPress={Keyboard.dismiss}
-              accessible={false}
-            >
+            <FormTouchWrapper>
               <View style={styles.innerContainer}>
                 <View style={styles.hero}>
                   <View style={styles.logo}>
@@ -524,7 +544,7 @@ export default function LoginScreen() {
                   )}
                 </LinearGradient>
               </View>
-            </TouchableWithoutFeedback>
+            </FormTouchWrapper>
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -760,7 +780,13 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(8,47,61,0.38)",
     marginBottom: 14,
   },
-  input: { flex: 1, color: "#F0FFF9", fontSize: 15, height: "100%" },
+  input: {
+    flex: 1,
+    color: "#F0FFF9",
+    fontSize: 16,
+    height: "100%",
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : {}),
+  },
   loginButton: {
     marginTop: 8,
     minHeight: 50,
@@ -770,6 +796,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexDirection: "row",
     gap: 9,
+    ...(Platform.OS === "web" ? ({ cursor: "pointer" } as any) : {}),
   },
   loginText: { color: "#16445A", fontSize: 15, fontWeight: "800" },
   hint: { color: "#A9CEC3", fontSize: 11, textAlign: "center", marginTop: 16 },

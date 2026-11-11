@@ -18,6 +18,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { useAuth } from "./_layout";
+import { getApiBaseUrl } from "@/constants/api-base";
 
 const { width } = Dimensions.get("window");
 
@@ -27,8 +28,8 @@ const { width } = Dimensions.get("window");
 const API_PORT = 8000;
 
 function getApiBase(): string {
-    const manual = process.env.EXPO_PUBLIC_API_URL;
-    if (manual) return manual.replace(/\/$/, "");
+    return getApiBaseUrl();
+
 
     if (Platform.OS === "web" && typeof window !== "undefined") {
         return `http://${window.location.hostname}:${API_PORT}`;
@@ -164,8 +165,8 @@ export default function ManagerScreen() {
             <Stack.Screen options={{ headerShown: false }} />
             
                 {/* 背景 Glow */}
-                <View style={[styles.glow, styles.glowTop]} />
-                <View style={[styles.glow, styles.glowBottom]} />
+                <View style={[styles.glow, styles.glowTop]} pointerEvents="none" />
+                <View style={[styles.glow, styles.glowBottom]} pointerEvents="none" />
 
                 <SafeAreaView style={styles.safeArea}>
                 <ScrollView
@@ -240,7 +241,7 @@ export default function ManagerScreen() {
                                 style={styles.mainBubbleGradient}
                             >
                                 <View style={styles.bubbleShine} />
-                                <View style={styles.bubbleGlow} />
+                                <View style={styles.bubbleGlow} pointerEvents="none" />
                                 <Text style={styles.mainBubbleIcon}>📢</Text>
                                 <Text style={styles.mainBubbleTitle}>管理公告</Text>
                                 <Text style={styles.mainBubbleDescription}>

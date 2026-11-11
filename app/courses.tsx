@@ -21,9 +21,9 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import Svg, { Circle } from "react-native-svg";
+import { getApiBaseUrl } from "@/constants/api-base";
 
-const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL = getApiBaseUrl();
 
 const DEFAULT_STUDENT_ID = process.env.EXPO_PUBLIC_DEFAULT_USER_ID || "";
 
@@ -47,6 +47,17 @@ type CompetencyThreshold = {
   name: string;
   status: "passed" | "pending";
   requirement: string;
+};
+
+const ModalCardTouchWrapper = ({ children }: { children: React.ReactNode }) => {
+  if (Platform.OS === "web") {
+    return <>{children}</>;
+  }
+  return (
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      {children}
+    </TouchableWithoutFeedback>
+  );
 };
 
 const CATEGORY_STYLES: {
@@ -459,8 +470,8 @@ export default function CoursesScreen() {
 
   return (
     <View style={styles.page}>
-      <View style={[styles.glow, styles.glowTop]} />
-      <View style={[styles.glow, styles.glowBottom]} />
+      <View style={[styles.glow, styles.glowTop]} pointerEvents="none" />
+      <View style={[styles.glow, styles.glowBottom]} pointerEvents="none" />
 
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
@@ -663,13 +674,14 @@ export default function CoursesScreen() {
 
       {/* 彈窗（點擊空白自動收起鍵盤） */}
       <Modal visible={modalVisible} transparent animationType="fade">
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <TouchableWithoutFeedback onPress={Platform.OS === "web" ? undefined : Keyboard.dismiss}>
           <View style={styles.modalOverlay}>
             <KeyboardAvoidingView
               behavior={Platform.OS === "ios" ? "padding" : undefined}
+              enabled={Platform.OS !== "web"}
               style={styles.keyboardAvoidContainer}
             >
-              <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <ModalCardTouchWrapper>
                 <View style={styles.modalCard}>
                   <Text style={styles.modalTitle}>同步校務成績單</Text>
                   <Text style={styles.modalSubtitle}>
@@ -722,7 +734,7 @@ export default function CoursesScreen() {
                     </Pressable>
                   </View>
                 </View>
-              </TouchableWithoutFeedback>
+              </ModalCardTouchWrapper>
             </KeyboardAvoidingView>
           </View>
         </TouchableWithoutFeedback>
@@ -1047,8 +1059,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     color: "#F0FFF9",
-    fontSize: 15,
+    fontSize: 16,
     marginBottom: 12,
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : {}),
   },
   modalBtnRow: { flexDirection: "row", gap: 12, marginTop: 8 },
   modalBtn: {

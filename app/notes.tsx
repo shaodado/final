@@ -21,6 +21,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "./_layout";
+import { getApiBaseUrl } from "@/constants/api-base";
 
 const DEFAULT_STUDENT_ID = process.env.EXPO_PUBLIC_DEFAULT_USER_ID || "";
 
@@ -31,6 +32,17 @@ const defaultAgenda = [
 ];
 
 type Panel = "feed" | "assignments" | "schedule" | "reminder" | null;
+
+const ModalCardTouchWrapper = ({ children }: { children: React.ReactNode }) => {
+  if (Platform.OS === "web") {
+    return <>{children}</>;
+  }
+  return (
+    <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+      {children}
+    </TouchableWithoutFeedback>
+  );
+};
 
 export default function NotesScreen() {
   const router = useRouter();
@@ -94,10 +106,7 @@ export default function NotesScreen() {
       try {
         setLoadingAssignments(true);
         // @ts-ignore
-        const baseUrl =
-          process.env.EXPO_PUBLIC_API_URL ||
-          process.env.EXPO_PUBLIC_API_BASE_URL ||
-          "http://127.0.0.1:8000";
+        const baseUrl = getApiBaseUrl();
         const res = await fetch(
           `${baseUrl}/api/student/assignments?user_id=${uid}`
         );
@@ -126,10 +135,7 @@ export default function NotesScreen() {
       try {
         setLoadingFeed(true);
         // @ts-ignore
-        const baseUrl =
-          process.env.EXPO_PUBLIC_API_URL ||
-          process.env.EXPO_PUBLIC_API_BASE_URL ||
-          "http://127.0.0.1:8000";
+        const baseUrl = getApiBaseUrl();
         const res = await fetch(`${baseUrl}/api/student/feed?user_id=${uid}`);
         const data = await res.json();
 
@@ -187,10 +193,7 @@ export default function NotesScreen() {
 
     try {
       // @ts-ignore
-      const baseUrl =
-        process.env.EXPO_PUBLIC_API_URL ||
-        process.env.EXPO_PUBLIC_API_BASE_URL ||
-        "http://127.0.0.1:8000";
+      const baseUrl = getApiBaseUrl();
       await fetch(`${baseUrl}/api/student/assignments/toggle`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -222,10 +225,7 @@ export default function NotesScreen() {
 
     try {
       // @ts-ignore
-      const baseUrl =
-        process.env.EXPO_PUBLIC_API_URL ||
-        process.env.EXPO_PUBLIC_API_BASE_URL ||
-        "http://127.0.0.1:8000";
+      const baseUrl = getApiBaseUrl();
       const res = await fetch(`${baseUrl}/api/student/sync-moodle`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -262,8 +262,8 @@ export default function NotesScreen() {
 
   return (
     <View style={styles.page}>
-      <View style={[styles.glow, styles.glowTop]} />
-      <View style={[styles.glow, styles.glowBottom]} />
+      <View style={[styles.glow, styles.glowTop]} pointerEvents="none" />
+      <View style={[styles.glow, styles.glowBottom]} pointerEvents="none" />
       <SafeAreaView style={styles.safeArea}>
         {/* 頂部 Header */}
         <View style={styles.headerRow}>
@@ -574,13 +574,14 @@ export default function NotesScreen() {
           setMoodleModalVisible(false);
         }}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <TouchableWithoutFeedback onPress={Platform.OS === "web" ? undefined : Keyboard.dismiss}>
           <View style={styles.syncModalOverlay}>
             <KeyboardAvoidingView
               behavior={Platform.OS === "ios" ? "padding" : undefined}
+              enabled={Platform.OS !== "web"}
               style={styles.keyboardAvoidContainer}
             >
-              <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <ModalCardTouchWrapper>
                 <View style={styles.syncModalCard}>
                   <Text style={styles.syncModalTitle}>
                     同步 Moodle 作業與通知
@@ -641,7 +642,7 @@ export default function NotesScreen() {
                     </Pressable>
                   </View>
                 </View>
-              </TouchableWithoutFeedback>
+              </ModalCardTouchWrapper>
             </KeyboardAvoidingView>
           </View>
         </TouchableWithoutFeedback>
@@ -1415,8 +1416,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingHorizontal: 16,
     color: "#F0FFF9",
-    fontSize: 15,
+    fontSize: 16,
     marginBottom: 12,
+    ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as any) : {}),
   },
   syncModalBtnRow: { flexDirection: "row", gap: 12, marginTop: 8 },
   syncModalBtn: {

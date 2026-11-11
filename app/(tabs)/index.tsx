@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../_layout";
+import { getApiBaseUrl } from "@/constants/api-base";
 
 type BubblePosition = "right" | "left" | "center";
 
@@ -59,7 +60,7 @@ export default function HomeScreen() {
   const { signOut, userName } = useAuth();
 
   // @ts-ignore
-  const baseUrl = process.env.EXPO_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  const baseUrl = getApiBaseUrl();
 
   const [schoolAnnouncements, setSchoolAnnouncements] = useState<
     SchoolAnnouncement[]
@@ -130,8 +131,8 @@ export default function HomeScreen() {
   return (
     <View style={styles.page}>
       {/* 背景光暈 */}
-      <View style={[styles.glow, styles.glowTop]} />
-      <View style={[styles.glow, styles.glowBottom]} />
+      <View style={[styles.glow, styles.glowTop]} pointerEvents="none" />
+      <View style={[styles.glow, styles.glowBottom]} pointerEvents="none" />
 
       <SafeAreaView style={styles.safeArea}>
         {/* 頁首 */}
@@ -323,8 +324,8 @@ function BubbleButton({ bubble, onPress }: BubbleButtonProps) {
         locations={[0, 0.55, 1]}
         style={styles.bubbleGradient}
       >
-        <View style={styles.bubbleShine} />
-        <View style={styles.bubbleGlow} />
+        <View style={styles.bubbleShine} pointerEvents="none" />
+        <View style={styles.bubbleGlow} pointerEvents="none" />
 
         <Text
           style={[
