@@ -535,11 +535,6 @@ export default function LoginScreen() {
                           忘記密碼？
                         </Text>
                       </Pressable>
-
-                      <Text style={styles.hint}>
-                        測試帳號：學生 3001 (密碼 123) · 老師 1001 (密碼 321) ·
-                        管理員 2001 (密碼 123)
-                      </Text>
                     </>
                   )}
                 </LinearGradient>
