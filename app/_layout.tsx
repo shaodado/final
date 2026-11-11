@@ -12,9 +12,10 @@ import "react-native-reanimated";
 
 if (Platform.OS === "web" && typeof window !== "undefined") {
   Alert.alert = (
-    title?: string,
-    message?: string,
-    buttons?: Array<{ text?: string; onPress?: () => void; style?: string }>
+    title?: any,
+    message?: any,
+    buttons?: any,
+    options?: any
   ) => {
     const text = [title, message].filter(Boolean).join("\n\n");
     if (!buttons || buttons.length <= 1) {
@@ -26,10 +27,10 @@ if (Platform.OS === "web" && typeof window !== "undefined") {
     }
     if (window.confirm(text)) {
       const confirmBtn =
-        buttons.find((b) => b.style !== "cancel") || buttons[buttons.length - 1];
+        buttons.find((b: any) => b.style !== "cancel") || buttons[buttons.length - 1];
       confirmBtn?.onPress?.();
     } else {
-      const cancelBtn = buttons.find((b) => b.style === "cancel");
+      const cancelBtn = buttons.find((b: any) => b.style === "cancel");
       cancelBtn?.onPress?.();
     }
   };

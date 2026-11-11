@@ -2856,22 +2856,12 @@ def sync_moodle(req: SyncMoodleRequest):
                 "title": a["title"],
                 "course": a["course"],
                 "due": a["due"],
+                "is_done": bool(a.get("is_done", False)),
                 "updated_at": now_str,
             }
-            set_on_insert = {}
-
-            if a.get("is_done"):
-                update_data["is_done"] = True
-            else:
-                set_on_insert["is_done"] = False
-
-            update_doc = {"$set": update_data}
-            if set_on_insert:
-                update_doc["$setOnInsert"] = set_on_insert
-
             db["STUDENT_ASSIGNMENT"].update_one(
                 {"user_id": req.user_id, "assignment_id": a["assignment_id"]},
-                update_doc,
+                {"$set": update_data},
                 upsert=True,
             )
 
@@ -2926,30 +2916,13 @@ def get_student_assignments(user_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ③ 手動標記作業完成狀態端點
+# ③ 手動標記作業完成狀態端點（已依需求停用手動修改，純依 Moodle 爬蟲判定）
 @app.post("/api/student/assignments/toggle")
 def toggle_assignment(req: ToggleAssignmentRequest):
-    try:
-        target = db["STUDENT_ASSIGNMENT"].find_one({
-            "user_id": req.user_id,
-            "assignment_id": req.assignment_id,
-        })
-        if not target:
-            raise HTTPException(status_code=404, detail="找不到該作業紀錄")
-
-        new_status = not target.get("is_done", False)
-        db["STUDENT_ASSIGNMENT"].update_one(
-            {"_id": target["_id"]},
-            {
-                "$set": {
-                    "is_done": new_status,
-                    "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                }
-            },
-        )
-        return {"success": True, "is_done": new_status}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return {
+        "success": False,
+        "message": "作業完成狀態純依校務/Moodle爬取結果判定，不支援手動修改。",
+    }
 
 
 # =============================================================

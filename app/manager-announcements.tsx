@@ -25,26 +25,7 @@ import { getApiBaseUrl } from "@/constants/api-base";
 const API_PORT = 8000;
 
 function getApiBase(): string {
-    // 1. 手動指定
     return getApiBaseUrl();
-    if (manual) return manual.replace(/\/$/, "");
-
-    // 2. 網頁版：跟著目前網址的主機
-    if (Platform.OS === "web" && typeof window !== "undefined") {
-        return `http://${window.location.hostname}:${API_PORT}`;
-    }
-
-    // 3. Expo Go / 開發版：用 Metro 開發伺服器所在電腦的 IP
-    const hostUri = Constants.expoConfig?.hostUri;
-    const host = hostUri?.split(":")[0];
-    if (host && !host.includes("exp.direct")) {
-        return `http://${host}:${API_PORT}`;
-    }
-
-    // 4. 最後備案
-    return Platform.OS === "android"
-        ? `http://10.0.2.2:${API_PORT}`
-        : `http://localhost:${API_PORT}`;
 }
 
 const API_BASE = getApiBase();
@@ -574,7 +555,9 @@ export default function ManagerAnnouncementsScreen() {
                 visible={!!deleteTarget}
                 transparent
                 animationType="fade"
-                onRequestClose={() => !deleting && setDeleteTarget(null)}
+                onRequestClose={() => {
+                    if (!deleting) setDeleteTarget(null);
+                }}
             >
                 <View style={styles.dialogBackdrop}>
                     <View style={styles.dialog}>

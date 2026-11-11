@@ -342,7 +342,7 @@ export default function NotesScreen() {
             {/* 2. 作業完成狀態 */}
             <View>
               <Action
-                title="標記作業完成狀態"
+                title="作業完成狀態"
                 detail={
                   assignmentList.length > 0
                     ? `${completedCount} / ${assignmentList.length} 項作業已完成`
@@ -872,6 +872,33 @@ function PanelView({
       {/* 2. 作業完成清單 */}
       {panel === "assignments" && (
         <View style={styles.itemList}>
+          <View
+            style={{
+              marginBottom: 8,
+              padding: 10,
+              borderRadius: 10,
+              backgroundColor: "rgba(255,255,255,0.06)",
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <Ionicons
+              name="information-circle-outline"
+              size={18}
+              color="#9EF2BE"
+            />
+            <Text
+              style={{
+                color: "#D7EAE4",
+                fontSize: 12,
+                flex: 1,
+                lineHeight: 17,
+              }}
+            >
+              作業狀態純依 Moodle 系統同步結果判定（已繳交即標記，未繳交無標記），不提供手動變更。
+            </Text>
+          </View>
           {loadingAssignments ? (
             <ActivityIndicator
               color="#F2C14E"
@@ -882,17 +909,13 @@ function PanelView({
               const isDone = Boolean(item.is_done ?? item.done);
               const assignId = item.assignment_id || item.title;
               return (
-                <Pressable
-                  key={assignId}
-                  onPress={() => toggleAssignment(assignId)}
-                  style={styles.assignment}
-                >
+                <View key={assignId} style={styles.assignment}>
                   <Ionicons
                     name={isDone ? "checkmark-circle" : "ellipse-outline"}
                     size={23}
                     color={isDone ? "#9EF2BE" : "#B9D7CF"}
                   />
-                  <View style={styles.itemCopy}>
+                  <View style={[styles.itemCopy, { flex: 1, marginLeft: 8 }]}>
                     <Text style={[styles.itemTitle, isDone && styles.done]}>
                       {item.title}
                     </Text>
@@ -900,7 +923,27 @@ function PanelView({
                       {item.course} · {item.due}
                     </Text>
                   </View>
-                </Pressable>
+                  <View
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      borderRadius: 6,
+                      backgroundColor: isDone
+                        ? "rgba(158, 242, 190, 0.18)"
+                        : "rgba(255, 255, 255, 0.08)",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        fontSize: 11,
+                        fontWeight: "600",
+                        color: isDone ? "#9EF2BE" : "#B9D7CF",
+                      }}
+                    >
+                      {isDone ? "已繳交" : "未繳交"}
+                    </Text>
+                  </View>
+                </View>
               );
             })
           ) : (

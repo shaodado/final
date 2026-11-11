@@ -27,20 +27,6 @@ const API_PORT = 8000;
 
 function getApiBase(): string {
     return getApiBaseUrl();
-    if (manual) return manual.replace(/\/$/, "");
-
-    if (Platform.OS === "web" && typeof window !== "undefined") {
-        return `http://${window.location.hostname}:${API_PORT}`;
-    }
-
-    const host = Constants.expoConfig?.hostUri?.split(":")[0];
-    if (host && !host.includes("exp.direct")) {
-        return `http://${host}:${API_PORT}`;
-    }
-
-    return Platform.OS === "android"
-        ? `http://10.0.2.2:${API_PORT}`
-        : `http://localhost:${API_PORT}`;
 }
 
 const API_BASE = getApiBase();
@@ -669,7 +655,9 @@ export default function ManagerAccountsScreen() {
                 visible={!!deleteTarget}
                 transparent
                 animationType="fade"
-                onRequestClose={() => !deleting && setDeleteTarget(null)}
+                onRequestClose={() => {
+                    if (!deleting) setDeleteTarget(null);
+                }}
             >
                 <View style={styles.dialogBackdrop}>
                     <View style={styles.dialog}>
