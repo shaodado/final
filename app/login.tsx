@@ -105,14 +105,16 @@ export default function LoginScreen() {
       const data = await res.json();
 
       if (data.success) {
-        // 🌟 將當前登入者的學號寫入手機本機快取
-        if (data.userId) {
-          await AsyncStorage.setItem("current_user_id", String(data.userId));
+        // 🌟 將當前登入者的學號與帳號寫入手機本機快取
+        const activeUserId = data.userId || trimmedAccount;
+        if (activeUserId) {
+          await AsyncStorage.setItem("current_user_id", String(activeUserId));
         }
+        await AsyncStorage.setItem("user_account", trimmedAccount);
 
         // role 可能是 "student" / "teacher" / "admin"
         // signIn 會把角色存入 context，由 _layout 依角色導向對應頁面
-        signIn(data.role, data.userId, data.name);
+        signIn(data.role, activeUserId, data.name);
       } else {
         Alert.alert("登入失敗", data.message || "帳號或密碼不正確。");
       }

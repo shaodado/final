@@ -201,6 +201,24 @@ export const getDeptCode = (deptName: string): string => {
   return MCU_DEPT_CODES[deptName] || "999";
 };
 
+export const getDeptByAccount = (
+  account?: string | number | null
+): string | null => {
+  if (!account) return null;
+  let s = String(account).trim();
+  if (s.includes("@")) s = s.split("@")[0].trim();
+  if (s.length === 7 && /^\d+$/.test(s)) s = s.padStart(8, "0");
+  if (s.length >= 8 && /^\d{8}/.test(s)) {
+    const code = s.slice(2, 4);
+    for (const [dept, c] of Object.entries(MCU_DEPT_CODES)) {
+      if (c === code && dept !== "全部") {
+        return dept;
+      }
+    }
+  }
+  return null;
+};
+
 export const sortDepartmentsByCode = (depts: string[]): string[] => {
   const filtered = Array.from(
     new Set(depts.filter((d) => Boolean(d) && d !== "全部"))
@@ -346,7 +364,7 @@ export default function MoodScreen() {
     userId || 3001
   );
 
-  const scrollViewRef = useRef<ScrollView>(null);
+  const scrollViewRef = useRef<any>(null);
   const [keyboardHeight, setKeyboardHeight] = useState<number>(0);
 
   const [panel, setPanel] = useState<Panel>(null);
@@ -386,9 +404,11 @@ export default function MoodScreen() {
     const initUserId = async () => {
       try {
         const stored = await AsyncStorage.getItem("current_user_id");
-        if (stored) {
-          setCurrentUserId(Number(stored));
-          setMcuAccount(stored);
+        const storedAcct = await AsyncStorage.getItem("user_account");
+        const active = storedAcct || stored;
+        if (active) {
+          setCurrentUserId(active);
+          setMcuAccount(active);
         }
       } catch (e) {
         console.warn("無法讀取本機學號:", e);
@@ -729,7 +749,8 @@ export default function MoodScreen() {
 
   const fetchGeminiQuiz = async (uidOverride?: number | string) => {
     const rawId = uidOverride || currentUserId;
-    const uid = Number(rawId) || 3001;
+    const uid = rawId || 3001;
+    const resolvedDept = getDeptByAccount(uid);
     setLoadingQuizQuestions(true);
     setQuizStep(0);
     setQuizAnswers([]);
@@ -738,7 +759,10 @@ export default function MoodScreen() {
       const res = await fetch(`${baseUrl}/api/quiz/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: uid }),
+        body: JSON.stringify({
+          user_id: uid,
+          ...(resolvedDept ? { department: resolvedDept } : {}),
+        }),
       });
       const json = await res.json();
       if (
@@ -800,7 +824,8 @@ export default function MoodScreen() {
 
   const submitQuizToGemini = async (answers: QuizAnswerRecord[]) => {
     setSubmittingQuiz(true);
-    const uid = Number(currentUserId) || 3001;
+    const uid = currentUserId || 3001;
+    const resolvedDept = getDeptByAccount(uid);
     try {
       const res = await fetch(`${baseUrl}/api/quiz/recommend`, {
         method: "POST",
@@ -808,6 +833,7 @@ export default function MoodScreen() {
         body: JSON.stringify({
           user_id: uid,
           answers: answers,
+          ...(resolvedDept ? { department: resolvedDept } : {}),
         }),
       });
       const json = await res.json();

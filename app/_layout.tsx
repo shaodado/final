@@ -1,8 +1,10 @@
 import {
   DarkTheme,
   DefaultTheme,
-  Stack,
   ThemeProvider,
+} from "@react-navigation/native";
+import {
+  Stack,
   useRouter,
 } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -46,10 +48,10 @@ export type UserRole = "manager" | "teacher" | "student";
 
 type AuthContextValue = {
   role: UserRole | null;
-  userId: number | null;
+  userId: number | string | null;
   userName: string | null;
   isSignedIn: boolean;
-  signIn: (role: UserRole, userId: number, userName: string) => void;
+  signIn: (role: UserRole, userId: number | string, userName: string) => void;
   signOut: () => void;
 };
 
@@ -66,13 +68,13 @@ export default function RootLayout() {
   const router = useRouter();
 
   const [role, setRole] = useState<UserRole | null>(null);
-  const [userId, setUserId] = useState<number | null>(null);
+  const [userId, setUserId] = useState<number | string | null>(null);
   const [userName, setUserName] = useState<string | null>(null);
   const [isSignedIn, setIsSignedIn] = useState(false);
 
   const signIn = (
     nextRole: UserRole,
-    nextUserId: number,
+    nextUserId: number | string,
     nextUserName: string
   ) => {
     // 後端回傳的是 "Manager"（大寫），統一轉成小寫再比對守衛

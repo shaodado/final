@@ -13,6 +13,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -24,12 +25,6 @@ import { useAuth } from "./_layout";
 import { getApiBaseUrl } from "@/constants/api-base";
 
 const DEFAULT_STUDENT_ID = process.env.EXPO_PUBLIC_DEFAULT_USER_ID || "";
-
-const defaultAgenda = [
-  "09:10 互動媒體程式設計",
-  "13:10 資料視覺化",
-  "15:10 社群媒體與文化",
-];
 
 type Panel = "feed" | "assignments" | "schedule" | "reminder" | null;
 
@@ -69,6 +64,19 @@ export default function NotesScreen() {
   // 作業清單動態狀態
   const [assignmentList, setAssignmentList] = useState<any[]>([]);
   const [loadingAssignments, setLoadingAssignments] = useState(false);
+
+  // 今日課表動態狀態 (每日凌晨 12 點更新、按時間由早到晚排序)
+  const [dailySchedule, setDailySchedule] = useState<any[]>([]);
+  const [scheduleInfo, setScheduleInfo] = useState<{
+    date?: string;
+    formatted_date?: string;
+    weekday_text?: string;
+    last_updated_at?: string;
+    has_synced?: boolean;
+    semester_term?: string;
+    message?: string;
+  }>({});
+  const [loadingSchedule, setLoadingSchedule] = useState(false);
 
   // Moodle 同步彈窗狀態
   const [moodleModalVisible, setMoodleModalVisible] = useState(false);
@@ -154,24 +162,64 @@ export default function NotesScreen() {
     [currentUserId]
   );
 
+  // 讀取當日個人課表（支援時間從早到晚排序、地點與教師）
+  const fetchDailySchedule = useCallback(
+    async (targetId?: number) => {
+      const uid = targetId !== undefined ? targetId : currentUserId;
+      if (!uid || uid === 0) return;
+
+      try {
+        setLoadingSchedule(true);
+        // @ts-ignore
+        const baseUrl = getApiBaseUrl();
+        const res = await fetch(
+          `${baseUrl}/api/student/daily-schedule?user_id=${uid}`
+        );
+        const data = await res.json();
+        if (data.success && Array.isArray(data.courses)) {
+          setDailySchedule(data.courses);
+          setScheduleInfo({
+            date: data.date,
+            formatted_date: data.formatted_date,
+            weekday_text: data.weekday_text,
+            last_updated_at: data.last_updated_at,
+            has_synced: data.has_synced,
+            semester_term: data.semester_term,
+            message: data.message,
+          });
+        }
+      } catch (e) {
+        console.warn("載入個人課表失敗:", e);
+      } finally {
+        setLoadingSchedule(false);
+      }
+    },
+    [currentUserId]
+  );
+
   // 🌟 初次進入頁面：優先從 AsyncStorage 讀取與 courses.tsx 相同的已登入學號
   useEffect(() => {
     const initUserData = async () => {
       try {
         const storedId = await AsyncStorage.getItem("current_user_id");
-        const activeId = storedId
-          ? Number(storedId)
-          : DEFAULT_STUDENT_ID
-            ? Number(DEFAULT_STUDENT_ID)
-            : userId
-              ? Number(userId)
-              : 0;
+        const storedAccount = await AsyncStorage.getItem("user_account");
+        let activeId = storedId ? Number(storedId) : 0;
+        if (!activeId || isNaN(activeId)) {
+          if (storedAccount && !isNaN(Number(storedAccount))) {
+            activeId = Number(storedAccount);
+          } else if (DEFAULT_STUDENT_ID) {
+            activeId = Number(DEFAULT_STUDENT_ID);
+          } else if (userId) {
+            activeId = Number(userId);
+          }
+        }
 
         if (activeId > 0) {
           setCurrentUserId(activeId);
           setMoodleAccount(String(activeId));
           fetchAssignments(activeId);
           fetchStudentFeed(activeId);
+          fetchDailySchedule(activeId);
         }
       } catch (e) {
         console.warn("讀取本機登入學號失敗:", e);
@@ -179,7 +227,37 @@ export default function NotesScreen() {
     };
 
     initUserData();
-  }, [userId, fetchAssignments, fetchStudentFeed]);
+  }, [userId, fetchAssignments, fetchStudentFeed, fetchDailySchedule]);
+
+  // 🌟 每日凌晨 12 點 (00:00:05) 自動定時更新一次課表
+  useEffect(() => {
+    if (!currentUserId || currentUserId === 0) return;
+
+    let timerId: any = null;
+    const scheduleNextMidnightUpdate = () => {
+      const now = new Date();
+      // 設定下一個凌晨 00:00:05 (多緩衝 5 秒確保系統已跨日)
+      const nextMidnight = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1,
+        0,
+        0,
+        5
+      );
+      const ms = Math.max(1000, nextMidnight.getTime() - now.getTime());
+
+      timerId = setTimeout(() => {
+        fetchDailySchedule(currentUserId);
+        scheduleNextMidnightUpdate(); // 遞迴排程次日凌晨
+      }, ms);
+    };
+
+    scheduleNextMidnightUpdate();
+    return () => {
+      if (timerId) clearTimeout(timerId);
+    };
+  }, [currentUserId, fetchDailySchedule]);
 
   // 切換作業打勾狀態並同步寫回 MongoDB
   const toggleAssignmentStatus = async (assignId: string) => {
@@ -372,11 +450,15 @@ export default function NotesScreen() {
               )}
             </View>
 
-            {/* 3. 個人課業時程 */}
+            {/* 3. 個人課表 */}
             <View>
               <Action
-                title="匯出個人課業時程"
-                detail="查看並分享今天的課表"
+                title="匯出個人課表"
+                detail={
+                  dailySchedule.length > 0
+                    ? `今天 ${dailySchedule.length} 門課 · 依時間由早到晚排序`
+                    : "查看今日課表與上課地點"
+                }
                 icon="calendar-outline"
                 color="#F2C14E"
                 expanded={panel === "schedule"}
@@ -397,6 +479,9 @@ export default function NotesScreen() {
                   loadingAssignments={loadingAssignments}
                   toggleAssignment={toggleAssignmentStatus}
                   onOpenSyncModal={() => setMoodleModalVisible(true)}
+                  dailySchedule={dailySchedule}
+                  scheduleInfo={scheduleInfo}
+                  loadingSchedule={loadingSchedule}
                 />
               )}
             </View>
@@ -717,6 +802,9 @@ function PanelView({
   loadingAssignments,
   toggleAssignment,
   onOpenSyncModal,
+  dailySchedule = [],
+  scheduleInfo = {},
+  loadingSchedule = false,
 }: {
   panel: Exclude<Panel, null>;
   close: () => void;
@@ -729,15 +817,62 @@ function PanelView({
   loadingAssignments?: boolean;
   toggleAssignment: (id: string) => void;
   onOpenSyncModal: () => void;
+  dailySchedule?: any[];
+  scheduleInfo?: any;
+  loadingSchedule?: boolean;
 }) {
+  const router = useRouter();
+
   const title =
     panel === "feed"
       ? "動態聯絡簿"
       : panel === "assignments"
         ? "作業完成狀態"
         : panel === "schedule"
-          ? "個人課業時程"
+          ? "個人課表"
           : "自訂提醒規則";
+
+  const handleExportSchedule = async () => {
+    if (!dailySchedule || dailySchedule.length === 0) {
+      Alert.alert("無課表可匯出", "今日沒有任何課堂安排。");
+      return;
+    }
+
+    const termPrefix = scheduleInfo?.semester_term ? ` [${scheduleInfo.semester_term}學期]` : "";
+    const dateTitle = `${scheduleInfo?.formatted_date || "今日"} ${scheduleInfo?.weekday_text || ""}${termPrefix}`;
+    const header = `📅【銘傳大學 個人課表】${dateTitle}\n================================\n`;
+    const body = dailySchedule
+      .map(
+        (c, idx) =>
+          `📌 第 ${idx + 1} 堂課\n⏰ 時間：${c.time_range} (${c.period_range})\n📖 課程：${c.course_name}\n📍 地點：${c.classroom}\n👨‍🏫 老師：${c.teacher}`
+      )
+      .join("\n--------------------------------\n");
+    const footer = `\n================================\n共 ${dailySchedule.length} 門課程 · 依學生資訊系統修課記錄每日更新`;
+    const fullText = header + body + footer;
+
+    if (Platform.OS === "web") {
+      if (typeof navigator !== "undefined" && navigator.clipboard) {
+        try {
+          await navigator.clipboard.writeText(fullText);
+          Alert.alert(
+            "課表已複製至剪貼簿",
+            "你可以直接貼上分享到 LINE 或其他軟體：\n\n" + fullText
+          );
+          return;
+        } catch (_) {}
+      }
+      Alert.alert("今日個人課表匯出", fullText);
+    } else {
+      try {
+        await Share.share({
+          message: fullText,
+          title: `【個人課表】${dateTitle}`,
+        });
+      } catch (err) {
+        Alert.alert("分享失敗", "請手動複製課表資訊。");
+      }
+    }
+  };
 
   const PAGE_SIZE = 5;
   const [feedPage, setFeedPage] = useState<number>(1);
@@ -972,26 +1107,190 @@ function PanelView({
       {/* 3. 課業時程 */}
       {panel === "schedule" && (
         <>
-          <Text style={styles.panelCopy}>今天 · 課業時程總覽</Text>
-          <View style={styles.itemList}>
-            {defaultAgenda.map((item) => (
-              <View key={item} style={styles.scheduleRow}>
-                <Ionicons name="time-outline" size={18} color="#F2C14E" />
-                <Text style={styles.itemTitle}>{item}</Text>
-              </View>
-            ))}
+          <View
+            style={{
+              marginBottom: 10,
+              padding: 10,
+              borderRadius: 10,
+              backgroundColor: "rgba(242, 193, 78, 0.12)",
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <Ionicons name="time-outline" size={18} color="#F2C14E" />
+            <Text
+              style={{
+                color: "#FBE6B1",
+                fontSize: 12,
+                flex: 1,
+                lineHeight: 17,
+              }}
+            >
+              每日凌晨 12 點自動更新 · 依時間排序（從早到晚）
+            </Text>
           </View>
+
+          <Text style={styles.panelCopy}>
+            {scheduleInfo?.formatted_date || "今日"} · {scheduleInfo?.weekday_text || ""} 課堂總覽
+          </Text>
+
+          <View style={styles.itemList}>
+            {loadingSchedule ? (
+              <ActivityIndicator
+                color="#F2C14E"
+                style={{ paddingVertical: 20 }}
+              />
+            ) : dailySchedule && dailySchedule.length > 0 ? (
+              dailySchedule.map((item, idx) => (
+                <View
+                  key={`${item.course_name}-${item.start_time}-${idx}`}
+                  style={{
+                    padding: 13,
+                    borderRadius: 13,
+                    backgroundColor: "rgba(239, 255, 249, 0.08)",
+                    borderLeftWidth: 4,
+                    borderLeftColor: "#F2C14E",
+                    gap: 6,
+                  }}
+                >
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 6,
+                      }}
+                    >
+                      <Ionicons name="time-outline" size={16} color="#F2C14E" />
+                      <Text
+                        style={{
+                          color: "#F2C14E",
+                          fontSize: 13,
+                          fontWeight: "700",
+                        }}
+                      >
+                        {item.time_range}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        paddingHorizontal: 7,
+                        paddingVertical: 2,
+                        borderRadius: 6,
+                        backgroundColor: "rgba(242, 193, 78, 0.2)",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "#F2C14E",
+                          fontSize: 11,
+                          fontWeight: "600",
+                        }}
+                      >
+                        {item.period_range}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <Text
+                    style={{
+                      color: "#FFFFFF",
+                      fontSize: 15,
+                      fontWeight: "700",
+                    }}
+                  >
+                    {item.course_name}
+                  </Text>
+
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginTop: 2,
+                    }}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 5,
+                      }}
+                    >
+                      <Ionicons
+                        name="location-outline"
+                        size={14}
+                        color="#9EF2BE"
+                      />
+                      <Text style={{ color: "#D7EAE4", fontSize: 12 }}>
+                        {item.classroom}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 5,
+                      }}
+                    >
+                      <Ionicons
+                        name="person-outline"
+                        size={14}
+                        color="#B9D7CF"
+                      />
+                      <Text style={{ color: "#B9D7CF", fontSize: 12 }}>
+                        {item.teacher}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ))
+            ) : scheduleInfo?.has_synced === false ? (
+              <View style={styles.emptyCard}>
+                <View style={styles.emptyIconCircle}>
+                  <Ionicons name="cloud-download-outline" size={26} color="#F2C14E" />
+                </View>
+                <Text style={styles.emptyTitle}>尚未同步學生資訊系統課表</Text>
+                <Text style={styles.emptyDesc}>
+                  目前尚未同步你的校務修課紀錄。{"\n"}
+                  請點擊下方按鈕前往「自我審查」同步銘傳學生資訊系統。
+                </Text>
+                <Pressable
+                  style={[styles.primaryButton, { marginTop: 12, width: "100%" }]}
+                  onPress={() => router.push("/courses" as any)}
+                >
+                  <Ionicons name="sync-outline" size={16} color="#16445A" />
+                  <Text style={styles.primaryText}>前往同步學生資訊系統</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.emptyCard}>
+                <View style={styles.emptyIconCircle}>
+                  <Ionicons name="cafe-outline" size={26} color="#F2C14E" />
+                </View>
+                <Text style={styles.emptyTitle}>今日無課堂安排</Text>
+                <Text style={styles.emptyDesc}>
+                  {scheduleInfo?.semester_term ? `【${scheduleInfo.semester_term} 學期】` : ""}今天沒有排定任何課程，好好放鬆或進行自主學習吧！{"\n"}
+                  系統將於每日凌晨 12 點自動更新明日課表。
+                </Text>
+              </View>
+            )}
+          </View>
+
           <Pressable
             style={styles.primaryButton}
-            onPress={() =>
-              Alert.alert(
-                "課表已準備完成",
-                "你可以從系統分享選單儲存或傳送時程。"
-              )
-            }
+            onPress={handleExportSchedule}
+            accessibilityRole="button"
           >
             <Ionicons name="share-outline" size={18} color="#16445A" />
-            <Text style={styles.primaryText}>匯出課業時程</Text>
+            <Text style={styles.primaryText}>匯出個人課表</Text>
           </Pressable>
         </>
       )}

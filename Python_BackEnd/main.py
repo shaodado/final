@@ -5,6 +5,7 @@ import requests
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Union, Any
 import random
+import secrets
 
 from bson import ObjectId
 from fastapi import FastAPI, HTTPException
@@ -143,7 +144,7 @@ class ManagerEvaluationUpdate(BaseModel):
 # 同步學生歷年成績請求
 # -------------------------
 class SyncTranscriptRequest(BaseModel):
-    user_id: int
+    user_id: Union[int, str]
     mcu_account: str
     mcu_password: str
 
@@ -151,7 +152,7 @@ class SyncTranscriptRequest(BaseModel):
 # Moodle請求格式宣告
 # -------------------------
 class SyncMoodleRequest(BaseModel):
-    user_id: int
+    user_id: Union[int, str]
     moodle_account: str
     moodle_password: str
 
@@ -284,6 +285,213 @@ def root():
 
 
 # =============================================================
+# 6.5 銘傳大學官方科系代碼與帳號自動解析模組
+# =============================================================
+
+MCU_DEPT_CODES = {
+    "通識教育中心": "00",
+    "全校通識": "00",
+    "外語教學中心": "01",
+    "英語教學中心": "01",
+    "體育室": "02",
+    "數位媒體設計學系": "09",
+    "數位媒體設計系": "09",
+    "師資培育中心": "10",
+    "企業管理學系": "11",
+    "資訊管理學系": "13",
+    "觀光事業學系": "14",
+    "影音新聞暨社群傳播學系": "15",
+    "新聞學系": "15",
+    "應用統計與資料科學學系": "17",
+    "休閒遊憩管理學系": "18",
+    "餐旅管理學系": "19",
+    "商業設計學系": "21",
+    "商品設計學系": "23",
+    "建築學系": "24",
+    "廣告暨策略行銷學系": "26",
+    "新聞與大眾傳播學士學位學程": "27",
+    "強化體能健康促進學分學程": "28",
+    "傳播學院全媒體大一不分系學士班": "30",
+    "傳播學院全媒體學士學位學程": "30",
+    "新媒體暨傳播管理學系": "31",
+    "廣播電視學系": "32",
+    "資訊工程學系": "36",
+    "資訊傳播工程學系": "37",
+    "犯罪防治學系": "38",
+    "生物科技學系": "39",
+    "醫療資訊與管理學系": "40",
+    "法律學系": "41",
+    "應用英語學系": "42",
+    "應用日語學系": "44",
+    "金融科技應用學士學位學程": "46",
+    "旅遊與觀光學士學位學程": "48",
+    "觀光學士學位學程": "48",
+    "會計學系": "52",
+    "資訊應用與金融保險學系": "53",
+    "風險管理與保險學系": "53",
+    "財務金融學系": "54",
+    "國際企業學系": "57",
+    "國際事務與外交學士學位學程": "59",
+    "諮商臨床與工商心理學系": "60",
+    "諮商臨床與工商心理學系碩士班諮商心理學組": "61",
+    "諮商臨床與工商心理學系碩士班臨床心理學組": "62",
+    "金融學系": "64",
+    "經濟與金融學系": "64",
+    "財金法律學系": "65",
+    "生物醫學工程學系": "67",
+    "公共事務與行政管理學系": "68",
+    "高階經理碩士在職學位學程": "70",
+    "金融智慧與永續未來學分學程": "72",
+    "都市設計與永續發展學系": "74",
+    "都市規劃與防災學系": "74",
+    "人工智慧應用學系": "75",
+    "半導體應用學士學位學程": "76",
+    "動漫文創設計學士學位學程": "78",
+    "應用中文與華語文教學系": "79",
+    "應用中國文學系": "79",
+    "華語文教學學系": "79",
+    "工商管理學士學位學程泰國境外專班": "81",
+    "電腦與通訊工程學系": "82",
+    "電子工程學系": "83",
+    "教育研究所": "83",
+    "電機工程學系": "84",
+    "金融科技應用學系": "86",
+    "時尚與創新管理學士學位學程": "88",
+    "資訊科技應用與管理學士學位學程": "89",
+    "資訊科技應用學士學位學程": "89",
+    "國際事務碩士學位學程": "90",
+    "國際企業與貿易學士學位學程": "91",
+    "國際企業學士學位學程": "91",
+    "流行音樂與舞蹈學士學位學程": "92",
+    "金融科技碩士學位學程": "96",
+    "國防行政管理進修學士學位學程": "98",
+    "國際班": "99",
+    "金門校區(不分系所)": "KM",
+}
+
+MCU_CODE_TO_DEPT = {
+    "00": "通識教育中心",
+    "01": "外語教學中心",
+    "02": "體育室",
+    "09": "數位媒體設計學系",
+    "10": "師資培育中心",
+    "11": "企業管理學系",
+    "13": "資訊管理學系",
+    "14": "觀光事業學系",
+    "15": "影音新聞暨社群傳播學系",
+    "17": "應用統計與資料科學學系",
+    "18": "休閒遊憩管理學系",
+    "19": "餐旅管理學系",
+    "21": "商業設計學系",
+    "23": "商品設計學系",
+    "24": "建築學系",
+    "26": "廣告暨策略行銷學系",
+    "27": "新聞與大眾傳播學士學位學程",
+    "28": "強化體能健康促進學分學程",
+    "30": "傳播學院全媒體大一不分系學士班",
+    "31": "新媒體暨傳播管理學系",
+    "32": "廣播電視學系",
+    "36": "資訊工程學系",
+    "37": "資訊傳播工程學系",
+    "38": "犯罪防治學系",
+    "39": "生物科技學系",
+    "40": "醫療資訊與管理學系",
+    "41": "法律學系",
+    "42": "應用英語學系",
+    "44": "應用日語學系",
+    "46": "金融科技應用學士學位學程",
+    "48": "旅遊與觀光學士學位學程",
+    "52": "會計學系",
+    "53": "資訊應用與金融保險學系",
+    "54": "財務金融學系",
+    "57": "國際企業學系",
+    "59": "國際事務與外交學士學位學程",
+    "60": "諮商臨床與工商心理學系",
+    "61": "諮商臨床與工商心理學系碩士班諮商心理學組",
+    "62": "諮商臨床與工商心理學系碩士班臨床心理學組",
+    "64": "金融學系",
+    "65": "財金法律學系",
+    "67": "生物醫學工程學系",
+    "68": "公共事務與行政管理學系",
+    "70": "高階經理碩士在職學位學程",
+    "72": "金融智慧與永續未來學分學程",
+    "74": "都市設計與永續發展學系",
+    "75": "人工智慧應用學系",
+    "76": "半導體應用學士學位學程",
+    "78": "動漫文創設計學士學位學程",
+    "79": "應用中文與華語文教學系",
+    "81": "工商管理學士學位學程泰國境外專班",
+    "82": "電腦與通訊工程學系",
+    "83": "教育研究所",
+    "84": "電機工程學系",
+    "86": "金融科技應用學系",
+    "88": "時尚與創新管理學士學位學程",
+    "89": "資訊科技應用與管理學士學位學程",
+    "90": "國際事務碩士學位學程",
+    "91": "國際企業與貿易學士學位學程",
+    "92": "流行音樂與舞蹈學士學位學程",
+    "96": "金融科技碩士學位學程",
+    "98": "國防行政管理進修學士學位學程",
+    "99": "國際班",
+    "KM": "金門校區(不分系所)",
+}
+
+
+def get_dept_code(dept_name: str) -> str:
+    if not dept_name or dept_name == "全部":
+        return ""
+    return MCU_DEPT_CODES.get(dept_name, "999")
+
+
+def extract_8digit_student_id(val: Any) -> Optional[str]:
+    """
+    從字串、數值或信箱中擷取 8 碼學生學號字串
+    """
+    if val is None:
+        return None
+    s = str(val).strip()
+    if "@" in s:
+        s = s.split("@")[0].strip()
+    # 7 碼因轉為整數遺失前導 0 補足為 8 碼（例如 01360001 -> 1360001 -> 01360001）
+    if len(s) == 7 and s.isdigit():
+        s = s.zfill(8)
+    if len(s) == 8 and s.isdigit():
+        return s
+    match = re.search(r"\b(\d{8})\b", s)
+    if match:
+        return match.group(1)
+    return None
+
+
+def get_dept_by_account_or_id(account_val: Any) -> Optional[str]:
+    """
+    根據登入帳號或學號（8碼）中左邊數來第 3、第 4 碼（index 2:4）精準對應科系：
+    例如：
+      11360001 -> 第 3, 4 碼為 '36' -> 資訊工程學系
+      11130001 -> 第 3, 4 碼為 '13' -> 資訊管理學系
+      11140001 -> 第 3, 4 碼為 '14' -> 觀光事業學系
+      11410001 -> 第 3, 4 碼為 '41' -> 法律學系
+    """
+    s8 = extract_8digit_student_id(account_val)
+    if not s8:
+        return None
+    code = s8[2:4]
+
+    # 1. 優先查 COURSE 資料庫該 dept_code 實際開課對應的系所全名
+    try:
+        match = db["COURSE"].find_one({"dept_code": code})
+        if not match and code.isdigit():
+            match = db["COURSE"].find_one({"dept_code": int(code)})
+        if match and match.get("department"):
+            return match["department"]
+    except Exception:
+        pass
+
+    # 2. 查 MCU 官方代碼對照表
+    return MCU_CODE_TO_DEPT.get(code)
+
+
+# =============================================================
 # 7. 身分驗證模組
 # =============================================================
 
@@ -307,11 +515,32 @@ def login(req: LoginRequest):
         student = db["STUDENT"].find_one(student_query)
 
         if student and str(student.get("password")) == str(req.password):
+            # 依登入帳號 8 碼中左邊數來第 3、第 4 碼自動校準科系
+            dept_from_acct = (
+                get_dept_by_account_or_id(req.account)
+                or get_dept_by_account_or_id(student.get("user_id"))
+                or get_dept_by_account_or_id(student.get("email"))
+            )
+            if dept_from_acct:
+                code = get_dept_code(dept_from_acct)
+                if student.get("department") != dept_from_acct or student.get("department_id") != code:
+                    try:
+                        db["STUDENT"].update_one(
+                            {"_id": student["_id"]},
+                            {"$set": {"department": dept_from_acct, "department_id": code}}
+                        )
+                        student["department"] = dept_from_acct
+                        student["department_id"] = code
+                    except Exception:
+                        pass
+
             return {
                 "success": True,
                 "role": "student",
-                "userId": student.get("user_id"),
+                "userId": student.get("user_id") or req.account,
                 "name": student.get("student_name", "同學"),
+                "department": student.get("department") or dept_from_acct,
+                "account": req.account,
             }
 
         # ---------------------------------------------------------
@@ -387,6 +616,8 @@ def register(req: LoginRequest):
         # 嘗試從信箱前綴擷取前 8 碼數字作為學號 (user_id)
         if req.account.endswith("@me.mcu.edu.tw") and email_prefix[:8].isdigit():
             new_id = int(email_prefix[:8])
+        elif email_prefix[:8].isdigit():
+            new_id = int(email_prefix[:8])
         else:
             # 取得最大 user_id + 1 作為備案
             last_student = collection.find_one(
@@ -395,12 +626,16 @@ def register(req: LoginRequest):
             )
             new_id = (last_student["user_id"] if last_student else 3000) + 1
 
+        reg_dept = get_dept_by_account_or_id(new_id) or get_dept_by_account_or_id(req.account)
+        reg_dept_code = get_dept_code(reg_dept) if reg_dept else (str(new_id)[2:4] if len(str(new_id)) == 8 else "36")
+
         new_student = {
             "user_id": new_id,
             "student_name": req.account.split("@")[0],
             "email": req.account,
             "password": req.password,
-            "department_id": "D001",
+            "department": reg_dept or "資訊工程學系",
+            "department_id": reg_dept_code,
             "grade": "大一",
         }
 
@@ -423,8 +658,8 @@ def forgot_password(req: ForgotPasswordRequest):
         if not student:
             return {"success": False, "message": "找不到此信箱對應的帳號"}
 
-        # 產生 6 位數驗證碼
-        code = str(random.randint(100000, 999999))
+        # 產生 6 位數安全隨機驗證碼
+        code = str(secrets.randbelow(900000) + 100000)
 
         # 儲存到 VERIFICATION_CODE 集合 (設定 10 分鐘後過期)
         db["VERIFICATION_CODE"].delete_many({"email": req.email}) # 刪除舊的驗證碼
@@ -778,6 +1013,422 @@ def get_student_courses(
 
 
 # =============================================================
+# 11.2 學生每日個人課表（依時間由早到晚排序、含上課地點與授課老師、每日凌晨 12 點更新）
+# =============================================================
+
+MCU_PERIOD_TIMES = {
+    "0": ("07:30", "08:05", 0),
+    "01": ("08:10", "09:00", 1),
+    "1": ("08:10", "09:00", 1),
+    "02": ("09:10", "10:00", 2),
+    "2": ("09:10", "10:00", 2),
+    "03": ("10:10", "11:00", 3),
+    "3": ("10:10", "11:00", 3),
+    "04": ("11:10", "12:00", 4),
+    "4": ("11:10", "12:00", 4),
+    "20": ("12:10", "13:00", 5),
+    "Z": ("12:10", "13:00", 5),
+    "05": ("13:10", "14:00", 6),
+    "5": ("13:10", "14:00", 6),
+    "06": ("14:10", "15:00", 7),
+    "6": ("14:10", "15:00", 7),
+    "07": ("15:10", "16:00", 8),
+    "7": ("15:10", "16:00", 8),
+    "08": ("16:10", "17:00", 9),
+    "8": ("16:10", "17:00", 9),
+    "09": ("17:05", "17:55", 10),
+    "9": ("17:05", "17:55", 10),
+    "10": ("18:00", "18:45", 11),
+    "40": ("18:00", "18:45", 11),
+    "E1": ("18:00", "18:45", 11),
+    "11": ("18:50", "19:35", 12),
+    "50": ("18:50", "19:35", 12),
+    "E2": ("18:50", "19:35", 12),
+    "12": ("19:40", "20:25", 13),
+    "60": ("19:40", "20:25", 13),
+    "E3": ("19:40", "20:25", 13),
+    "13": ("20:30", "21:15", 14),
+    "70": ("20:30", "21:15", 14),
+    "E4": ("20:30", "21:15", 14),
+}
+
+WEEKDAY_NAME_MAP = {
+    1: "星期一",
+    2: "星期二",
+    3: "星期三",
+    4: "星期四",
+    5: "星期五",
+    6: "星期六",
+    7: "星期日",
+}
+
+CHINESE_NUM_TO_DAY = {
+    "1": 1, "一": 1,
+    "2": 2, "二": 2,
+    "3": 3, "三": 3,
+    "4": 4, "四": 4,
+    "5": 5, "五": 5,
+    "6": 6, "六": 6,
+    "7": 7, "日": 7, "天": 7, "七": 7,
+}
+
+_CACHED_MCU_COURSES = None
+
+def get_cached_mcu_courses() -> List[Dict[str, Any]]:
+    """
+    自本地 mcu_courses.json 快取所有課程排程資料，避免離線或無法連線 MongoDB 時查無排程
+    """
+    global _CACHED_MCU_COURSES
+    if _CACHED_MCU_COURSES is None:
+        try:
+            json_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcu_courses.json")
+            if os.path.exists(json_path):
+                with open(json_path, "r", encoding="utf-8") as f:
+                    _CACHED_MCU_COURSES = json.load(f)
+            else:
+                _CACHED_MCU_COURSES = []
+        except Exception as e:
+            print(f"[警告] 讀取 mcu_courses.json 快取失敗: {e}")
+            _CACHED_MCU_COURSES = []
+    return _CACHED_MCU_COURSES
+
+
+def find_course_details_from_mcu_catalog(
+    course_name: str,
+    course_id: str = "",
+    teacher: str = "",
+    semester_term: str = "",
+    student_class: str = "",
+    student_dept: str = "",
+    student_campus: str = "",
+) -> Dict[str, Any]:
+    """
+    自 COURSE 集合或本地 mcu_courses.json 比對開課排程與教室地點
+    """
+    candidates = []
+    cid = str(course_id or "").strip()
+    cname = str(course_name or "").strip()
+    clean_name = re.sub(r"【.*?】|\[.*?\]|\(.*?\)|（.*?）", "", cname).strip()
+
+    # 1. 優先從 MongoDB COURSE 集合查詢
+    try:
+        or_filters = []
+        if cid and cid != cname:
+            or_filters.append({"course_id": cid})
+            if cid.isdigit():
+                or_filters.append({"course_id": int(cid)})
+        if cname:
+            or_filters.append({"course_name": cname})
+        if clean_name and clean_name != cname:
+            or_filters.append({"course_name": clean_name})
+        if or_filters:
+            candidates = list(db["COURSE"].find({"$or": or_filters}).limit(50))
+    except Exception:
+        candidates = []
+
+    # 2. 若 MongoDB 未命中或離線，自本地 mcu_courses.json 快取比對
+    if not candidates:
+        all_cached = get_cached_mcu_courses()
+        for item in all_cached:
+            item_cname = str(item.get("course_name", "")).strip()
+            item_cid = str(item.get("course_id", "")).strip()
+            if (cid and item_cid == cid) or (cname and item_cname == cname) or (clean_name and clean_name in item_cname):
+                candidates.append(item)
+
+    if not candidates:
+        return {}
+
+    # 3. 評分排序，選出最貼合當前學生排課的開課紀錄
+    def calc_match_score(item):
+        s = 0
+        sched = str(item.get("schedule", "")).strip()
+        if sched and sched != "---":
+            s += 50
+        if student_class and item.get("class_name") == student_class:
+            s += 100
+        item_teacher = str(item.get("teacher", "")).strip()
+        if teacher and teacher not in ["---", "專任教師", "授課教師"] and (teacher in item_teacher or item_teacher in teacher):
+            s += 60
+        if semester_term and item.get("semester_term") == semester_term:
+            s += 40
+        if cid and str(item.get("course_id", "")).strip() == cid:
+            s += 30
+        if cname and item.get("course_name") == cname:
+            s += 30
+        if student_dept and student_dept in str(item.get("department", "")):
+            s += 20
+        if student_campus and student_campus in str(item.get("campus", "")):
+            s += 10
+        return s
+
+    candidates.sort(key=calc_match_score, reverse=True)
+    return candidates[0]
+
+
+def extract_daily_periods(schedule_str: str, weekday_num: int) -> List[Dict[str, str]]:
+    """
+    從課堂排程字串（例如 '星期4:02 03 04節'）解析特定星期的節次與時間範圍，自動合併連續節次
+    """
+    results = []
+    if not schedule_str:
+        return results
+
+    matches = re.finditer(r"(?:星期|週)?([1-7一二三四五六日]):?\s*([\w\s]+?)(?:節|$)", schedule_str)
+    for m in matches:
+        day_key = m.group(1).strip()
+        parsed_day = CHINESE_NUM_TO_DAY.get(day_key)
+        if parsed_day == weekday_num:
+            periods_str = m.group(2).strip()
+            raw_tokens = [p for p in re.split(r"[\s,]+", periods_str) if p and p != "節"]
+            valid_tokens = [tok for tok in raw_tokens if tok in MCU_PERIOD_TIMES]
+            if not valid_tokens:
+                continue
+
+            valid_tokens.sort(key=lambda t: MCU_PERIOD_TIMES[t][2])
+            groups = []
+            curr = [valid_tokens[0]]
+            for t in valid_tokens[1:]:
+                if MCU_PERIOD_TIMES[t][2] == MCU_PERIOD_TIMES[curr[-1]][2] + 1:
+                    curr.append(t)
+                else:
+                    groups.append(curr)
+                    curr = [t]
+            if curr:
+                groups.append(curr)
+
+            for g in groups:
+                start_time = MCU_PERIOD_TIMES[g[0]][0]
+                end_time = MCU_PERIOD_TIMES[g[-1]][1]
+                pr = f"第 {g[0]}~{g[-1]} 節" if len(g) > 1 else f"第 {g[0]} 節"
+                results.append({
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "period_range": pr,
+                })
+    return results
+
+
+@app.get("/api/student/daily-schedule")
+def get_student_daily_schedule(
+    user_id: Union[int, str],
+    date: Optional[str] = None,
+    semester: Optional[str] = None,
+):
+    """
+    依據該學生在「學生資訊系統」已同步的修課紀錄 (STUDENT_ACADEMIC_RECORD) 抓取當日課程：
+    1. 僅抓取該生最新／當學期正在修讀的課程，過濾掉歷史學期的已修舊課。
+    2. 比對開課排程與教室地點，以當日星期篩選。
+    3. 按時間由早到晚嚴格排序。
+    4. 若該生尚未同步學生資訊系統或當日無課，嚴格回傳空列表，不造假。
+    """
+    try:
+        now = datetime.now()
+        target_date = now
+        if date:
+            try:
+                target_date = datetime.strptime(date, "%Y-%m-%d")
+            except ValueError:
+                target_date = now
+
+        weekday_num = target_date.isoweekday()
+        weekday_name = WEEKDAY_NAME_MAP.get(weekday_num, f"星期{weekday_num}")
+        formatted_date_str = target_date.strftime("%Y年%m月%d日")
+        today_date_str = target_date.strftime("%Y-%m-%d")
+
+        # 0. 整理所有可能指涉此學生的辨識碼 (int / str / account)
+        possible_uids = {user_id, str(user_id)}
+        if str(user_id).isdigit():
+            possible_uids.add(int(user_id))
+
+        student_query = [
+            {"user_id": user_id},
+            {"user_id": str(user_id)},
+        ]
+        if str(user_id).isdigit():
+            student_query.append({"user_id": int(user_id)})
+        student_query.append({"student_id": str(user_id)})
+        student_query.append({"account": str(user_id)})
+        student_query.append({"email": f"{user_id}@mcu.edu.tw"})
+
+        student_info = {}
+        try:
+            student_info = db["STUDENT"].find_one({"$or": student_query}) or {}
+        except Exception:
+            student_info = {}
+
+        if student_info:
+            if student_info.get("user_id") is not None:
+                possible_uids.add(student_info["user_id"])
+                possible_uids.add(str(student_info["user_id"]))
+            if student_info.get("student_id"):
+                possible_uids.add(str(student_info["student_id"]))
+            if student_info.get("account"):
+                possible_uids.add(str(student_info["account"]))
+
+        student_class = student_info.get("class_name", "")
+        student_dept = student_info.get("department", "")
+        student_campus = (
+            "桃園"
+            if (
+                "桃園" in student_class
+                or "桃園" in str(student_info.get("campus", ""))
+                or str(student_info.get("department_id", "")) in ["13", "14", "16", "36", "37"]
+            )
+            else "台北"
+        )
+
+        # 1. 查詢該學生已同步之修課紀錄 (STUDENT_ACADEMIC_RECORD)
+        records = []
+        try:
+            records = list(
+                db["STUDENT_ACADEMIC_RECORD"].find({
+                    "$or": [
+                        {"user_id": {"$in": list(possible_uids)}},
+                        {"student_id": {"$in": [str(u) for u in possible_uids]}},
+                    ]
+                })
+            )
+        except Exception as e:
+            print(f"[警告] 讀取 STUDENT_ACADEMIC_RECORD 失敗: {e}")
+            records = []
+
+        next_midnight = (target_date + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+
+        # 2. 若該學生尚未從學生資訊系統同步修課資料，明確回傳尚未同步與空課表（不造假）
+        if not records:
+            return {
+                "success": True,
+                "has_synced": False,
+                "message": "尚未同步學生資訊系統修課資料，請先至個人頁面同步以取得課表。",
+                "date": today_date_str,
+                "formatted_date": formatted_date_str,
+                "weekday_text": weekday_name,
+                "weekday_num": weekday_num,
+                "semester_term": "",
+                "total_courses": 0,
+                "courses": [],
+                "last_updated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+                "next_refresh_at": next_midnight.strftime("%Y-%m-%d %H:%M:%S"),
+            }
+
+        # 3. 判定當前最新學期（過濾過往歷史學期的舊課程）
+        all_terms = [
+            str(r.get("semester_term", "")).strip()
+            for r in records
+            if str(r.get("semester_term", "")).strip()
+        ]
+
+        if semester and semester.strip():
+            target_semester = semester.strip()
+        else:
+            target_semester = (
+                max(all_terms, key=parse_semester_sort_key)
+                if all_terms
+                else ""
+            )
+
+        # 4. 嚴格僅挑選該學生在 target_semester 修讀之課程
+        semester_courses = []
+        seen_course_keys = set()
+        for r in records:
+            term = str(r.get("semester_term", "")).strip()
+            if term != target_semester:
+                continue
+
+            # 排除已停修或退選之課程
+            score_str = str(r.get("score", "")).strip()
+            if score_str in ["W", "停修", "退選"]:
+                continue
+
+            cname = str(r.get("course_name", "")).strip()
+            cid = str(r.get("course_id", "")).strip()
+            dedup_key = cname or cid
+            if not dedup_key or dedup_key in seen_course_keys:
+                continue
+
+            seen_course_keys.add(dedup_key)
+            semester_courses.append(r)
+
+        # 5. 為當學期課程比對排程 (schedule) 與上課教室 (classroom)
+        daily_courses = []
+        for r in semester_courses:
+            cname = str(r.get("course_name", "")).strip()
+            cid = str(r.get("course_id", "")).strip()
+            cteacher = str(r.get("teacher", "")).strip()
+            sched_str = str(r.get("schedule", "")).strip()
+            classroom_name = str(r.get("classroom", "")).strip()
+
+            # 若學生修課紀錄中無排程資訊，自校方開課總表進行精準比對
+            if not sched_str:
+                matched = find_course_details_from_mcu_catalog(
+                    course_name=cname,
+                    course_id=cid,
+                    teacher=cteacher,
+                    semester_term=target_semester,
+                    student_class=student_class,
+                    student_dept=student_dept,
+                    student_campus=student_campus,
+                )
+                if matched:
+                    sched_str = str(matched.get("schedule", "")).strip()
+                    if not classroom_name or classroom_name in ["---", "校內指定教室"]:
+                        classroom_name = str(matched.get("classroom", "")).strip()
+                    if (not cteacher or cteacher in ["---", "專任教師", "授課教師"]) and matched.get("teacher"):
+                        cteacher = str(matched.get("teacher", "")).strip()
+
+            # 解析此課程是否在今日 (weekday_num) 有排課
+            day_periods = extract_daily_periods(sched_str, weekday_num)
+            if not day_periods:
+                continue
+
+            clean_cname = re.sub(r"【.*?】|\[.*?\]", "", cname).strip()
+            final_teacher = (
+                cteacher
+                if cteacher and cteacher not in ["專任教師", "授課教師", "---"]
+                else "任課教師"
+            )
+            final_classroom = (
+                classroom_name
+                if classroom_name and classroom_name not in ["---"]
+                else "校內公佈教室"
+            )
+
+            for dp in day_periods:
+                daily_courses.append({
+                    "course_id": cid or clean_cname,
+                    "course_name": clean_cname,
+                    "teacher": final_teacher,
+                    "classroom": final_classroom,
+                    "schedule_raw": sched_str,
+                    "period_range": dp["period_range"],
+                    "time_range": f"{dp['start_time']} - {dp['end_time']}",
+                    "start_time": dp["start_time"],
+                    "end_time": dp["end_time"],
+                    "semester_term": target_semester,
+                })
+
+        # 6. 嚴格由早到晚排序 (依 start_time 升冪排序)
+        daily_courses.sort(key=lambda item: item["start_time"])
+
+        return {
+            "success": True,
+            "has_synced": True,
+            "date": today_date_str,
+            "formatted_date": formatted_date_str,
+            "weekday_text": weekday_name,
+            "weekday_num": weekday_num,
+            "semester_term": target_semester,
+            "total_courses": len(daily_courses),
+            "courses": daily_courses,
+            "last_updated_at": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "next_refresh_at": next_midnight.strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# =============================================================
 # 11.1 學生已修課程同步與取得（爬蟲一鍵完成）
 # =============================================================
 
@@ -802,7 +1453,7 @@ def sync_and_get_courses(req: AutoSyncCoursesRequest):
             }
 
         # 2. 執行爬蟲
-        student_id_str = str(req.user_id)
+        student_id_str = str(req.mcu_account).strip() if req.mcu_account else str(req.user_id).strip()
         summary, courses, student_info, competencies = crawl_mcu_transcript(
             student_id_str, password
         )
@@ -821,6 +1472,7 @@ def sync_and_get_courses(req: AutoSyncCoursesRequest):
                     "$set": {
                         **c,
                         "user_id": req.user_id,
+                        "student_id": student_id_str,
                         "updated_at": now_str,
                     }
                 },
@@ -895,96 +1547,8 @@ def sync_and_get_courses(req: AutoSyncCoursesRequest):
 
 
 # =============================================================
-# 12. 全校課程搜尋
+# 12. 全校課程搜尋（科系對照請參見 6.5 模組之 MCU_DEPT_CODES）
 # =============================================================
-
-# 銘傳大學官方科系代碼對照表
-MCU_DEPT_CODES = {
-    "通識教育中心": "00",
-    "全校通識": "00",
-    "外語教學中心": "01",
-    "英語教學中心": "01",
-    "體育室": "02",
-    "數位媒體設計學系": "09",
-    "數位媒體設計系": "09",
-    "師資培育中心": "10",
-    "企業管理學系": "11",
-    "資訊管理學系": "13",
-    "觀光事業學系": "14",
-    "影音新聞暨社群傳播學系": "15",
-    "新聞學系": "15",
-    "應用統計與資料科學學系": "17",
-    "休閒遊憩管理學系": "18",
-    "餐旅管理學系": "19",
-    "商業設計學系": "21",
-    "商品設計學系": "23",
-    "建築學系": "24",
-    "廣告暨策略行銷學系": "26",
-    "新聞與大眾傳播學士學位學程": "27",
-    "強化體能健康促進學分學程": "28",
-    "傳播學院全媒體大一不分系學士班": "30",
-    "傳播學院全媒體學士學位學程": "30",
-    "新媒體暨傳播管理學系": "31",
-    "廣播電視學系": "32",
-    "資訊工程學系": "36",
-    "資訊傳播工程學系": "37",
-    "犯罪防治學系": "38",
-    "生物科技學系": "39",
-    "醫療資訊與管理學系": "40",
-    "法律學系": "41",
-    "應用英語學系": "42",
-    "應用日語學系": "44",
-    "金融科技應用學士學位學程": "46",
-    "旅遊與觀光學士學位學程": "48",
-    "觀光學士學位學程": "48",
-    "會計學系": "52",
-    "資訊應用與金融保險學系": "53",
-    "風險管理與保險學系": "53",
-    "財務金融學系": "54",
-    "國際企業學系": "57",
-    "國際事務與外交學士學位學程": "59",
-    "諮商臨床與工商心理學系": "60",
-    "諮商臨床與工商心理學系碩士班諮商心理學組": "61",
-    "諮商臨床與工商心理學系碩士班臨床心理學組": "62",
-    "金融學系": "64",
-    "經濟與金融學系": "64",
-    "財金法律學系": "65",
-    "生物醫學工程學系": "67",
-    "公共事務與行政管理學系": "68",
-    "高階經理碩士在職學位學程": "70",
-    "金融智慧與永續未來學分學程": "72",
-    "都市設計與永續發展學系": "74",
-    "都市規劃與防災學系": "74",
-    "人工智慧應用學系": "75",
-    "半導體應用學士學位學程": "76",
-    "動漫文創設計學士學位學程": "78",
-    "應用中文與華語文教學系": "79",
-    "應用中國文學系": "79",
-    "華語文教學學系": "79",
-    "工商管理學士學位學程泰國境外專班": "81",
-    "電腦與通訊工程學系": "82",
-    "電子工程學系": "83",
-    "教育研究所": "83",
-    "電機工程學系": "84",
-    "金融科技應用學系": "86",
-    "時尚與創新管理學士學位學程": "88",
-    "資訊科技應用與管理學士學位學程": "89",
-    "資訊科技應用學士學位學程": "89",
-    "國際事務碩士學位學程": "90",
-    "國際企業與貿易學士學位學程": "91",
-    "國際企業學士學位學程": "91",
-    "流行音樂與舞蹈學士學位學程": "92",
-    "金融科技碩士學位學程": "96",
-    "國防行政管理進修學士學位學程": "98",
-    "國際班": "99",
-    "金門校區(不分系所)": "KM",
-}
-
-
-def get_dept_code(dept_name: str) -> str:
-    if not dept_name or dept_name == "全部":
-        return ""
-    return MCU_DEPT_CODES.get(dept_name, "999")
 
 
 @app.get("/api/courses/departments")
@@ -1102,11 +1666,12 @@ def search_courses(
                 })
             else:
                 clean_dept = department.replace("學系", "").replace("系", "").replace("中心", "").strip()
+                safe_dept = re.escape(clean_dept)
                 conditions.append({
                     "$or": [
                         {"department": department},
-                        {"department": {"$regex": clean_dept, "$options": "i"}},
-                        {"domain": {"$regex": clean_dept, "$options": "i"}},
+                        {"department": {"$regex": safe_dept, "$options": "i"}},
+                        {"domain": {"$regex": safe_dept, "$options": "i"}},
                     ]
                 })
 
@@ -1143,23 +1708,25 @@ def search_courses(
                     ]
                 })
             else:
+                safe_campus = re.escape(clean_campus)
                 conditions.append({
                     "$or": [
                         {"campus": clean_campus},
-                        {"campus": {"$regex": clean_campus, "$options": "i"}},
-                        {"classroom": {"$regex": clean_campus, "$options": "i"}},
+                        {"campus": {"$regex": safe_campus, "$options": "i"}},
+                        {"classroom": {"$regex": safe_campus, "$options": "i"}},
                     ]
                 })
 
         if keyword and keyword.strip():
             kw = keyword.strip()
+            safe_kw = re.escape(kw)
             conditions.append({
                 "$or": [
-                    {"course_name": {"$regex": kw, "$options": "i"}},
-                    {"teacher": {"$regex": kw, "$options": "i"}},
-                    {"course_id": {"$regex": kw, "$options": "i"}},
-                    {"class_name": {"$regex": kw, "$options": "i"}},
-                    {"classroom": {"$regex": kw, "$options": "i"}},
+                    {"course_name": {"$regex": safe_kw, "$options": "i"}},
+                    {"teacher": {"$regex": safe_kw, "$options": "i"}},
+                    {"course_id": {"$regex": safe_kw, "$options": "i"}},
+                    {"class_name": {"$regex": safe_kw, "$options": "i"}},
+                    {"classroom": {"$regex": safe_kw, "$options": "i"}},
                 ]
             })
 
@@ -1354,11 +1921,15 @@ def get_school_announcements():
     try:
         col = db["NOTIFY"]
 
+        # 🌟 嚴格過濾：僅撈取真正的校級公告，堅決排除特定學生的個人 Moodle 課堂回饋/通知
         query = {
+            "type": "校級公告",
+            "course_name": {"$ne": "Moodle"},
+            "is_moodle": {"$ne": True},
             "$or": [
-                {"course_id": None},
-                {"type": "校級公告"},
-            ]
+                {"user_id": None},
+                {"user_id": {"$exists": False}},
+            ],
         }
 
         docs = list(col.find(query).sort("_id", -1).limit(10))
@@ -1400,7 +1971,17 @@ def get_manager_announcements():
     try:
         col = db["NOTIFY"]
 
-        docs = list(col.find({}).sort("_id", -1))
+        # 🌟 排除個人 Moodle 課程通知，僅供管理員管理校級與課堂公告
+        query = {
+            "course_name": {"$ne": "Moodle"},
+            "is_moodle": {"$ne": True},
+            "$or": [
+                {"user_id": None},
+                {"user_id": {"$exists": False}},
+            ],
+        }
+
+        docs = list(col.find(query).sort("_id", -1))
 
         announcements = []
 
@@ -2069,24 +2650,55 @@ def extract_json_from_text(text: str) -> Optional[dict]:
     return None
 
 
-def resolve_student_department(student: Optional[dict], req_dept: Optional[str] = None) -> str:
+def resolve_student_department(
+    student: Optional[dict] = None,
+    req_dept: Optional[str] = None,
+    user_id_or_account: Any = None,
+) -> str:
     """
     智能解析學生所屬系所名稱：
-    1. 優先使用請求指定系所 (req.department)
-    2. 使用 STUDENT 文件中的 department 欄位
+    ★ 核心依據：根據學生登入帳號或學號 8 碼中左邊數來第 3、第 4 碼（index 2:4）對應科系做推薦
+    1. 優先使用請求明確指定之系所 (req_dept，非全部)
+    2. 優先根據登入帳號或學號（8碼）左邊數來第 3、第 4 碼（dept_code）對應之科系
+       - 來源涵蓋：user_id_or_account、student['user_id']、student['email']、student['account']
+       - 範例：11360001 (資工36) -> 資訊工程學系；11140001 (觀光14) -> 觀光事業學系
     3. 解析 class_name (例如 觀三甲 -> 觀光事業學系；資管三乙 -> 資訊管理學系)
-    4. 查 COURSE 反查 dept_code 符合 student.department_id 的系所
-    5. 查 TEACHER 反查 department_id
-    6. 預設銘傳常用「觀光事業學系」或「資訊工程學系」
+    4. 使用 STUDENT 文件中的 department 欄位（若非全部）
+    5. 查 COURSE 反查 dept_code 符合 student.department_id 的系所
+    6. 預設返回「資訊工程學系」
     """
-    if req_dept and req_dept.strip() and req_dept != "全部":
+    if req_dept and req_dept.strip() and req_dept.strip() != "全部":
         return req_dept.strip()
-    if not student:
-        return "觀光事業學系"
 
-    dept = student.get("department")
-    if dept and str(dept).strip() and str(dept).strip() != "全部":
-        return str(dept).strip()
+    # 🌟 核心規則：檢查登入帳號或學號中左邊數來第 3、第 4 碼
+    account_candidates = [
+        user_id_or_account,
+        student.get("user_id") if student else None,
+        student.get("email") if student else None,
+        student.get("account") if student else None,
+        student.get("student_id") if student else None,
+    ]
+
+    for cand in account_candidates:
+        dept_from_acct = get_dept_by_account_or_id(cand)
+        if dept_from_acct:
+            # 同步校正 student 資料庫文件中的 department 與 department_id
+            if student and student.get("_id"):
+                code = get_dept_code(dept_from_acct)
+                if student.get("department") != dept_from_acct or student.get("department_id") != code:
+                    try:
+                        db["STUDENT"].update_one(
+                            {"_id": student["_id"]},
+                            {"$set": {"department": dept_from_acct, "department_id": code}}
+                        )
+                        student["department"] = dept_from_acct
+                        student["department_id"] = code
+                    except Exception:
+                        pass
+            return dept_from_acct
+
+    if not student:
+        return "資訊工程學系"
 
     class_name = student.get("class_name") or ""
     if class_name:
@@ -2098,6 +2710,10 @@ def resolve_student_department(student: Optional[dict], req_dept: Optional[str] 
             match_dept = db["COURSE"].find_one({"department": {"$regex": re.escape(prefix)}})
             if match_dept and match_dept.get("department"):
                 return match_dept["department"]
+
+    dept = student.get("department")
+    if dept and str(dept).strip() and str(dept).strip() != "全部":
+        return str(dept).strip()
 
     dept_id = student.get("department_id")
     if dept_id is not None:
@@ -2113,7 +2729,7 @@ def resolve_student_department(student: Optional[dict], req_dept: Optional[str] 
         if teacher_doc and teacher_doc.get("department_name"):
             return teacher_doc["department_name"]
 
-    return "觀光事業學系"
+    return "資訊工程學系"
 
 
 # =============================================================
@@ -2137,9 +2753,17 @@ def generate_quiz_questions(req: QuizGenerateRequest):
         student = db["STUDENT"].find_one({"user_id": user_id})
         if not student:
             student = db["STUDENT"].find_one({"user_id": str(user_id)})
+        if not student and raw_uid is not None:
+            student = db["STUDENT"].find_one({
+                "$or": [
+                    {"user_id": str(raw_uid)},
+                    {"email": str(raw_uid)},
+                    {"email": {"$regex": f"^{re.escape(str(raw_uid))}@"}},
+                ]
+            })
 
-        # 解析精準所屬科系
-        department = resolve_student_department(student, req.department)
+        # 解析精準所屬科系（依 8 碼帳號中左邊數來第 3、第 4 碼對應）
+        department = resolve_student_department(student, req.department, user_id_or_account=raw_uid)
 
         # 解析年級
         grade_val = req.grade or (student.get("grade") if student else None) or "大三"
@@ -2375,9 +2999,17 @@ def recommend_courses_by_quiz(req: QuizRecommendRequest):
         student = db["STUDENT"].find_one({"user_id": user_id})
         if not student:
             student = db["STUDENT"].find_one({"user_id": str(user_id)})
+        if not student and raw_uid is not None:
+            student = db["STUDENT"].find_one({
+                "$or": [
+                    {"user_id": str(raw_uid)},
+                    {"email": str(raw_uid)},
+                    {"email": {"$regex": f"^{re.escape(str(raw_uid))}@"}},
+                ]
+            })
 
-        # 解析精準所屬科系
-        department = resolve_student_department(student, req.department)
+        # 解析精準所屬科系（依 8 碼帳號中左邊數來第 3、第 4 碼對應）
+        department = resolve_student_department(student, req.department, user_id_or_account=raw_uid)
 
         # 解析年級
         grade_val = req.grade or (student.get("grade") if student else None) or "大三"
@@ -2436,6 +3068,7 @@ def recommend_courses_by_quiz(req: QuizRecommendRequest):
         # ---------------------------------------------------------
         # 1. 查詢該系所現有開授的選修課程候選清單（排除學生已通過的課程）
         # ---------------------------------------------------------
+        dept_code = get_dept_code(department)
         clean_dept = (
             department.replace("學系", "")
             .replace("系", "")
@@ -2444,15 +3077,19 @@ def recommend_courses_by_quiz(req: QuizRecommendRequest):
             .strip()
         )
 
+        dept_query_or = [
+            {"department": department},
+            {"department": {"$regex": re.escape(clean_dept), "$options": "i"}},
+            {"class_name": {"$regex": f"^{re.escape(clean_dept)}", "$options": "i"}},
+        ]
+        if dept_code:
+            dept_query_or.append({"dept_code": dept_code})
+            if dept_code.isdigit():
+                dept_query_or.append({"dept_code": int(dept_code)})
+
         # 從 COURSE 查詢該系所開授的課程
         dept_raw_courses = list(
-            db["COURSE"].find({
-                "$or": [
-                    {"department": department},
-                    {"department": {"$regex": re.escape(clean_dept), "$options": "i"}},
-                    {"class_name": {"$regex": f"^{re.escape(clean_dept)}", "$options": "i"}},
-                ]
-            }).limit(200)
+            db["COURSE"].find({"$or": dept_query_or}).limit(200)
         )
 
         # 學生已通過課程名稱集合（避免重複推薦）
@@ -2876,6 +3513,7 @@ def sync_moodle(req: SyncMoodleRequest):
                         "content": f["content"],
                         "time": f["time"],
                         "type": f["type"],
+                        "is_moodle": True,
                         "icon": f["icon"],
                         "published_at": now_str,
                     }
